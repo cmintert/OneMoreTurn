@@ -4,7 +4,9 @@
       "Bash(npx markdownlint-cli2:*)",
       "Bash(find . -name .markdownlintrc* -o -name .mdlintrc* -o -name markdownlint.json)",
       "Bash(ls -la .markdownlint*)",
-      "Bash(grep -n \"^.\\\\{101,\\\\}\" DESIGN.md)"
+      "Bash(grep -n \"^.\\\\{101,\\\\}\" DESIGN.md)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
