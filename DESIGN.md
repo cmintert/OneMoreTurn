@@ -37,20 +37,6 @@ modifying existing systems. This requires three foundational abstractions:
 
 ### 1. Component Metadata & Validation
 
-#### Current Limitations
-
-Components are data containers. The ECS reads and writes them, but has no way to understand
-relationships between components or validate that an entity is well-formed.
-
-Problems this creates:
-
-- A ship might have `Resources` but no `Owner`—nothing catches this until a system crashes.
-- Querying "all entities with Health AND Owner" requires hard-coded logic.
-- Adding a new component type means manually checking everywhere it's used.
-- Component evolution (versioning, migrations) has nowhere to live.
-
-#### Better Approach: Component Schemas
-
 Each component class carries metadata describing:
 
 - **What it is:** Name, human-readable description.
@@ -58,14 +44,14 @@ Each component class carries metadata describing:
 - **What it contains:** Type definitions for all properties (not instances).
 - **How it behaves:** Whether changes trigger events, validation rules, constraints.
 
-Example:
+Examples:
 
 - A `Health` component requires an `Owner` component (health only makes sense on owned entities).
 - A `Poison` component can only exist on entities with `Health`; if `Health` is removed, `Poison`
   is invalid.
 - A `Mana` component has a capacity constraint (`max_mana ≥ current_mana` always).
 
-#### Benefits
+**Benefits:**
 
 - **Validation at creation:** "Create ship" fails early if the archetype is missing a required
   component.
@@ -76,17 +62,11 @@ Example:
 - **Version safety:** Schemas can define migrations ("if Health v1 exists but not Health v2,
   transform it").
 
-#### Implementation Outline
-Each component declares a schema—a structured description of its dependencies, properties,
-and constraints. The system validates entities against their component set before turn resolution.
+**Implementation:** Each component declares a schema—a structured description of its
+dependencies, properties, and constraints. The system validates entities against their component
+set before turn resolution.
 
 ### 2. System Dependencies & Execution Order
-
-#### Current Limitations
-Manual orchestration is fragile. Order is hard-coded (ResourceProduction → Movement → Decay).
-If someone adds a spell system, where does it fit? Does it run before or after movement? Who knows?
-
-#### Better Approach: Declarative Dependencies
 
 Each system declares:
 
@@ -95,7 +75,7 @@ Each system declares:
 - **What it needs:** Which systems must run before it, which components it requires.
 - **Whether it can skip:** If required components are missing, can it safely skip?
 
-Example:
+Examples:
 
 - A `MovementSystem` says: "I run in the MAIN phase, after `ActionSystem` (actions might spawn
   movement), and I need `Position` and `Owner` components."
@@ -104,7 +84,7 @@ Example:
 - A `SpellCastingSystem` says: "I run in MAIN, after `ActionSystem`, before `MovementSystem`,
   and I need `Mana` and `Owner`."
 
-#### Benefits
+**Benefits:**
 
 - **Automatic ordering:** The engine builds a dependency graph and executes in correct order.
 - **No surprises:** If a system can't run (missing required components), it says so and skips
@@ -114,26 +94,11 @@ Example:
 - **Debuggability:** Logs show the exact order systems ran, why some skipped, and where time
   was spent.
 
-#### Implementation Outline
-Systems are registered with metadata about their phase and dependencies. Before turn resolution,
-the engine topologically sorts systems and executes them in order. If a system's requirements
-aren't met, it's logged and skipped.
+**Implementation:** Systems are registered with metadata about their phase and dependencies.
+Before turn resolution, the engine topologically sorts systems and executes them in order. If a
+system's requirements aren't met, it's logged and skipped.
 
 ### 3. Action Protocol & Universal Processing
-
-#### Current Limitations
-
-Orders are probably untyped JSON or ad-hoc classes tied to specific game mechanics. Adding a
-new unit type with new abilities means:
-
-- Creating new order types.
-- Updating the order parser.
-- Adding logic to a system to handle them.
-- Testing everywhere.
-
-Problem: The core engine doesn't know what an "action" is. It's scattered.
-
-#### Better Approach: Action as a Contract
 
 All player actions—Move, Build, CastSpell, TradeWith, SetTax—implement a single contract:
 
@@ -160,7 +125,7 @@ Examples:
   Is the structure available?" Then executes: deduct resources, create the structure entity,
   emit building events.
 
-#### Benefits
+**Benefits:**
 
 - **New mechanics are new Action classes:** Adding a spell system means writing a `CastSpell`
   action. No changes to core.
@@ -171,27 +136,11 @@ Examples:
 - **Testable:** New action types are testable in isolation (given a world state, does this
   action validate/execute correctly?).
 
-#### Implementation Outline
-
-Actions are objects with `validate()` and `execute()` methods. The `ActionSystem` iterates
-over them, calls `validate()` on each, executes valid ones, and collects events. Everything
-else subscribes to events.
+**Implementation:** Actions are objects with `validate()` and `execute()` methods. The
+`ActionSystem` iterates over them, calls `validate()` on each, executes valid ones, and collects
+events. Everything else subscribes to events.
 
 ### 4. Containment as a Pattern, Not Special Logic
-
-#### Current Limitations
-
-"Entities reference their parent via `parent_id`." But containment is actually several
-different things:
-
-- A star system contains planets (spatial containment).
-- A fleet contains ships (command hierarchy).
-- A caravan contains goods (inventory).
-- A population has a workforce (composition).
-
-All very different, but lumped into `parent_id`.
-
-#### Better Approach: Explicit Container Components
 
 Containment is expressed via components:
 
@@ -202,7 +151,14 @@ Containment is expressed via components:
 
 Both are optional. An entity either can contain or cannot; that's explicit.
 
-#### Benefits
+Examples:
+
+- A star system contains planets (spatial containment).
+- A fleet contains ships (command hierarchy).
+- A caravan contains goods (inventory).
+- A population has a workforce (composition).
+
+**Benefits:**
 
 - **Clear semantics:** You don't need to guess what `parent_id` means on a ship vs. a planet.
 - **Constraints are data:** A fleet might hold up to 12 ships; that's declared in its
@@ -213,26 +169,11 @@ Both are optional. An entity either can contain or cannot; that's explicit.
 - **Extensibility:** New container types just define a new `ContainerComponent` flavor; nothing
   breaks.
 
-#### Implementation Outline
-`ContainerComponent` and `ChildComponent` are ordinary components with metadata. Systems that care
-about containment (like logistics or movement) query these components. No special spatial logic;
-it's all through the component system.
+**Implementation:** `ContainerComponent` and `ChildComponent` are ordinary components with metadata.
+Systems that care about containment (like logistics or movement) query these components. No special
+spatial logic; it's all through the component system.
 
 ### 5. Events as First-Class Citizens
-
-#### Current Limitations
-
-Events exist mainly for logging. Systems might emit them, but they're not core to how the
-engine works.
-
-Problems:
-
-- Debugging is hard (logs are text; hard to correlate).
-- Replaying turns requires re-running systems (fragile).
-- Reporting to players is manual.
-- State changes are scattered (no single record of "what happened").
-
-#### Better Approach: Event-Driven Architecture
 
 Events are the record of truth for what happened during a turn. Every state change is
 described by an event.
@@ -248,7 +189,7 @@ Event properties:
 Systems emit events when they do work. The `EventBus` collects them. Subscribers (logger, UI,
 replay system) consume them.
 
-#### Benefits
+**Benefits:**
 
 - **Complete audit trail:** Every turn is a sequence of events; nothing is implicit.
 - **Deterministic replay:** Replay turn by replaying events, not re-running systems.
@@ -257,25 +198,11 @@ replay system) consume them.
 - **Extensibility:** New event types are new event classes; observers subscribe to what they
   care about.
 
-#### Implementation Outline
-All systems emit structured events (not log strings). Events have types (UnitMoved, ResourceProduced,
-SpellCast). `EventBus` dispatches them to subscribers. Subscribers (Logger, TurnSummary, Replay)
-consume the streams they care about.
+**Implementation:** All systems emit structured events (not log strings). Events have types
+(UnitMoved, ResourceProduced, SpellCast). `EventBus` dispatches them to subscribers. Subscribers
+(Logger, TurnSummary, Replay) consume the streams they care about.
 
 ### 6. World State as a Queryable Database
-
-#### Current Limitations
-
-Probably one big `World` class with scattered methods: `get_entity()`, `get_planet_by_id()`,
-`find_ships_in_system()`, etc.
-
-Problems:
-
-- Queries are ad-hoc and hard to compose.
-- Systems have to know about special cases.
-- Filtering by component is manual.
-
-#### Better Approach: Declarative Queries
 
 The `World` provides a simple, composable query interface:
 
@@ -287,16 +214,15 @@ The `World` provides a simple, composable query interface:
 
 All systems use the same interface. No hidden magic.
 
-#### Benefits
+**Benefits:**
 
 - **Consistency:** Everyone queries the same way.
 - **Efficiency:** Query logic is optimized in one place.
 - **Testability:** Easy to set up test worlds with specific configurations.
 - **Extensibility:** New systems don't invent their own queries.
 
-#### Implementation Outline
-`World` provides methods like `query(ComponentType1, ComponentType2)` returning entities,
-`add_component()`, `remove_component()`. No magic; just declarative, composable queries.
+**Implementation:** `World` provides methods like `query(ComponentType1, ComponentType2)` returning
+entities, `add_component()`, `remove_component()`. No magic; just declarative, composable queries.
 
 ### 7. Putting It Together: The Turn Loop
 
