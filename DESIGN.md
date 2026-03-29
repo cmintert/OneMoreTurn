@@ -495,8 +495,24 @@ Rationale: type-safety, predictable initialization, fewer lazy-init bugs.
 
 ### Determinism & RNG
 
-- **Decision:** Seeded RNG per turn. Seed = `(game_id, turn_number)`.
-- **Rationale:** Reproducible turn resolution for PBEM.
+- **Decision:** Seeded RNG per system per turn. Seed = `(game_id, turn_number, system_name)`.
+- **Rationale:** Reproducible turn resolution for PBEM. Each system gets its own RNG state so that
+  execution order is part of the determinism contract. Adding new systems does not cause
+  non-deterministic behavior due to RNG state consumption by earlier systems.
+- **Important Note:** When multiple systems call RNG in the same turn, the order in which systems
+  execute affects outcomes. This is intentional and documented as part of the determinism guarantee.
+
+### Conflict Resolution & Order Precedence
+
+- **Decision:** When multiple orders conflict (e.g., two players building on the same location),
+  resolution uses seeded RNG with unit modifiers.
+- **Mechanism:** Identify conflict, seed RNG with `(game_id, turn_number, system_name, conflict_id)`,
+  select winner based on unit modifiers (e.g., speed, type). One order succeeds; the other fails
+  with clear feedback to the player.
+- **Rationale:** Fair resolution independent of submission order. Unit composition becomes strategically
+  relevant (investing in fast units provides advantage in contention scenarios).
+- **Deferred:** Exact modifier formula (speed, type, combination). Determined in Phase 2 based on
+  playtesting and game balance goals.
 
 ### Turn Submission & Validation
 
