@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx markdownlint-cli2:*)",
+      "Bash(find . -name .markdownlintrc* -o -name .mdlintrc* -o -name markdownlint.json)",
+      "Bash(ls -la .markdownlint*)"
+    ]
+  }
+}

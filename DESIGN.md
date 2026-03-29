@@ -24,6 +24,405 @@ Inspired by Stars!, VGA Planets, and the elegance of asynchronous gameplay mecha
 - **Extensibility First:** Design should allow adding new entity types and mechanics
         without requiring refactoring of core systems.
 
+## ARCHITECTURE — Extensibility & Abstraction Layer
+
+The core engine must support adding new mechanics—units, spells, factions, resources—without
+modifying existing systems. This requires three foundational abstractions:
+
+1. **Component Metadata:** Components know what they need and what they do.
+2. **System Dependencies:** Systems declare what they need to run; execution order emerges
+   automatically.
+3. **Action Protocol:** All player actions follow a single interface; new action types require
+   no core changes.
+
+### 1. Component Metadata & Validation
+
+#### Current Limitations
+
+Components are data containers. The ECS reads and writes them, but has no way to understand
+relationships between components or validate that an entity is well-formed.
+
+Problems this creates:
+
+- A ship might have `Resources` but no `Owner`—nothing catches this until a system crashes.
+- Querying "all entities with Health AND Owner" requires hard-coded logic.
+- Adding a new component type means manually checking everywhere it's used.
+- Component evolution (versioning, migrations) has nowhere to live.
+
+#### Better Approach: Component Schemas
+
+Each component class carries metadata describing:
+
+- **What it is:** Name, human-readable description.
+- **What it needs:** Which other components must exist on the same entity.
+- **What it contains:** Type definitions for all properties (not instances).
+- **How it behaves:** Whether changes trigger events, validation rules, constraints.
+
+Example:
+
+- A `Health` component requires an `Owner` component (health only makes sense on owned entities).
+- A `Poison` component can only exist on entities with `Health`; if `Health` is removed, `Poison`
+  is invalid.
+- A `Mana` component has a capacity constraint (`max_mana ≥ current_mana` always).
+
+#### Benefits
+
+- **Validation at creation:** "Create ship" fails early if the archetype is missing a required
+  component.
+- **Smart querying:** "Give me all entities with [Health AND Owner]" becomes a schema query,
+  not manual iteration.
+- **Safe removal:** Before removing a component, check what depends on it.
+- **Extensibility:** New component? New schema. Nothing breaks.
+- **Version safety:** Schemas can define migrations ("if Health v1 exists but not Health v2,
+  transform it").
+
+#### Implementation Outline
+Each component declares a schema—a structured description of its dependencies, properties,
+and constraints. The system validates entities against their component set before turn resolution.
+
+### 2. System Dependencies & Execution Order
+
+#### Current Limitations
+Manual orchestration is fragile. Order is hard-coded (ResourceProduction → Movement → Decay).
+If someone adds a spell system, where does it fit? Does it run before or after movement? Who knows?
+
+#### Better Approach: Declarative Dependencies
+
+Each system declares:
+
+- **What it does:** Descriptive name.
+- **When it runs:** Execution phase (PRE_TURN, MAIN, POST_TURN, CLEANUP).
+- **What it needs:** Which systems must run before it, which components it requires.
+- **Whether it can skip:** If required components are missing, can it safely skip?
+
+Example:
+
+- A `MovementSystem` says: "I run in the MAIN phase, after `ActionSystem` (actions might spawn
+  movement), and I need `Position` and `Owner` components."
+- A `PoisonDamageSystem` says: "I run in POST_TURN, after all combat, and I need `Health` and
+  `Poison` components. If an entity has `Poison` but no `Health`, I skip it."
+- A `SpellCastingSystem` says: "I run in MAIN, after `ActionSystem`, before `MovementSystem`,
+  and I need `Mana` and `Owner`."
+
+#### Benefits
+
+- **Automatic ordering:** The engine builds a dependency graph and executes in correct order.
+- **No surprises:** If a system can't run (missing required components), it says so and skips
+  gracefully.
+- **Easy extension:** Adding a new system is declaring its dependencies, not rewriting the
+  execution loop.
+- **Debuggability:** Logs show the exact order systems ran, why some skipped, and where time
+  was spent.
+
+#### Implementation Outline
+Systems are registered with metadata about their phase and dependencies. Before turn resolution,
+the engine topologically sorts systems and executes them in order. If a system's requirements
+aren't met, it's logged and skipped.
+
+### 3. Action Protocol & Universal Processing
+
+#### Current Limitations
+
+Orders are probably untyped JSON or ad-hoc classes tied to specific game mechanics. Adding a
+new unit type with new abilities means:
+
+- Creating new order types.
+- Updating the order parser.
+- Adding logic to a system to handle them.
+- Testing everywhere.
+
+Problem: The core engine doesn't know what an "action" is. It's scattered.
+
+#### Better Approach: Action as a Contract
+
+All player actions—Move, Build, CastSpell, TradeWith, SetTax—implement a single contract:
+
+- **Validation:** "Can this action run right now?"
+  (Check orders, resources, prerequisites, target validity.)
+- **Execution:** "Run the action and emit events describing what happened."
+
+The core engine has a single `ActionSystem` that:
+
+- Receives all actions from all players.
+- Validates each one.
+- Executes valid ones in a deterministic order.
+- Emits events for every outcome.
+
+Examples:
+
+- A `MoveAction` validates: "Does the entity exist? Is it owned by the player? Can it move
+  (movement_points > 0)?" Then executes: move the entity, deduct movement points, emit a
+  `UnitMoved` event.
+- A `CastSpellAction` validates: "Does the caster have mana? Does the spell exist? Is the
+  target valid for this spell?" Then executes: deduct mana, apply spell effects, emit spell
+  events.
+- A `BuildStructureAction` validates: "Does the player own the location? Do they have resources?
+  Is the structure available?" Then executes: deduct resources, create the structure entity,
+  emit building events.
+
+#### Benefits
+
+- **New mechanics are new Action classes:** Adding a spell system means writing a `CastSpell`
+  action. No changes to core.
+- **Validation is consistent:** Every action validates itself; the engine doesn't need to know
+  about specifics.
+- **Deterministic:** Actions execute in order with seeded RNG; replays work.
+- **Observable:** Every action emits events; logs and replays are straightforward.
+- **Testable:** New action types are testable in isolation (given a world state, does this
+  action validate/execute correctly?).
+
+#### Implementation Outline
+
+Actions are objects with `validate()` and `execute()` methods. The `ActionSystem` iterates
+over them, calls `validate()` on each, executes valid ones, and collects events. Everything
+else subscribes to events.
+
+### 4. Containment as a Pattern, Not Special Logic
+
+#### Current Limitations
+
+"Entities reference their parent via `parent_id`." But containment is actually several
+different things:
+
+- A star system contains planets (spatial containment).
+- A fleet contains ships (command hierarchy).
+- A caravan contains goods (inventory).
+- A population has a workforce (composition).
+
+All very different, but lumped into `parent_id`.
+
+#### Better Approach: Explicit Container Components
+
+Containment is expressed via components:
+
+- **ContainerComponent:** "I can hold other entities." It declares capacity, what kinds of
+  children are allowed, and how the relationship works. A star system has this; a fleet has
+  this; an inventory has this.
+- **ChildComponent:** "I am contained by a parent." It knows its parent ID and can navigate up.
+
+Both are optional. An entity either can contain or cannot; that's explicit.
+
+#### Benefits
+
+- **Clear semantics:** You don't need to guess what `parent_id` means on a ship vs. a planet.
+- **Constraints are data:** A fleet might hold up to 12 ships; that's declared in its
+  `ContainerComponent`.
+- **Querying is simple:** "Give me all ships in fleet X" is a query on
+  `ChildComponent.parent_id == X`.
+- **Hierarchy depth is arbitrary:** Fleets can contain fleets; no special logic needed.
+- **Extensibility:** New container types just define a new `ContainerComponent` flavor; nothing
+  breaks.
+
+#### Implementation Outline
+`ContainerComponent` and `ChildComponent` are ordinary components with metadata. Systems that care
+about containment (like logistics or movement) query these components. No special spatial logic;
+it's all through the component system.
+
+### 5. Events as First-Class Citizens
+
+#### Current Limitations
+
+Events exist mainly for logging. Systems might emit them, but they're not core to how the
+engine works.
+
+Problems:
+
+- Debugging is hard (logs are text; hard to correlate).
+- Replaying turns requires re-running systems (fragile).
+- Reporting to players is manual.
+- State changes are scattered (no single record of "what happened").
+
+#### Better Approach: Event-Driven Architecture
+
+Events are the record of truth for what happened during a turn. Every state change is
+described by an event.
+
+Event properties:
+
+- **Who:** Which entity or system caused it.
+- **What:** What changed (Health decreased, Position changed, Resource produced).
+- **When:** Turn number and timestamp.
+- **Why:** Order ID or action that triggered it.
+- **Effects:** Serializable data about the change.
+
+Systems emit events when they do work. The `EventBus` collects them. Subscribers (logger, UI,
+replay system) consume them.
+
+#### Benefits
+
+- **Complete audit trail:** Every turn is a sequence of events; nothing is implicit.
+- **Deterministic replay:** Replay turn by replaying events, not re-running systems.
+- **Debugging:** Query "what happened to ship X" by filtering events.
+- **Player reporting:** Turn summary is auto-generated from events.
+- **Extensibility:** New event types are new event classes; observers subscribe to what they
+  care about.
+
+#### Implementation Outline
+All systems emit structured events (not log strings). Events have types (UnitMoved, ResourceProduced,
+SpellCast). `EventBus` dispatches them to subscribers. Subscribers (Logger, TurnSummary, Replay)
+consume the streams they care about.
+
+### 6. World State as a Queryable Database
+
+#### Current Limitations
+
+Probably one big `World` class with scattered methods: `get_entity()`, `get_planet_by_id()`,
+`find_ships_in_system()`, etc.
+
+Problems:
+
+- Queries are ad-hoc and hard to compose.
+- Systems have to know about special cases.
+- Filtering by component is manual.
+
+#### Better Approach: Declarative Queries
+
+The `World` provides a simple, composable query interface:
+
+- **Get all entities with these components:** Query by component types. The engine returns
+  matching entities efficiently.
+- **Get entity by ID:** Direct lookup.
+- **Get entities where component property X = Y:** Filter by component data.
+- **Add/remove component:** Safe mutation with validation against schemas.
+
+All systems use the same interface. No hidden magic.
+
+#### Benefits
+
+- **Consistency:** Everyone queries the same way.
+- **Efficiency:** Query logic is optimized in one place.
+- **Testability:** Easy to set up test worlds with specific configurations.
+- **Extensibility:** New systems don't invent their own queries.
+
+#### Implementation Outline
+`World` provides methods like `query(ComponentType1, ComponentType2)` returning entities,
+`add_component()`, `remove_component()`. No magic; just declarative, composable queries.
+
+### 7. Putting It Together: The Turn Loop
+
+A turn resolves like this:
+
+1. **Receive Orders:** All players submit actions.
+2. **Validate Orders:** Each action validates itself against the world state. Invalid orders are
+   rejected with clear feedback.
+3. **Execute Actions:** `ActionSystem` runs all valid actions in order. Each action emits events
+   describing its outcome.
+4. **Run Systems:** Remaining systems (Production, Movement, Decay, etc.) execute in dependency
+   order. Each system checks its requirements; if they're met, it processes entities and emits
+   events. If not, it skips and logs why.
+5. **Collect Events:** All events (from actions and systems) are accumulated.
+6. **Log & Snapshot:** Events are written to the database. A full JSON snapshot of the world
+   state is stored for replay/debugging.
+7. **Emit to Subscribers:** Event subscribers (UI updates, player notifications, stats
+   tracking) consume the event stream.
+
+Key properties:
+
+- **Deterministic:** Same input (seed, orders, world state) always produces the same output.
+- **Observable:** Every change is an event; nothing is implicit.
+- **Extensible:** New actions, systems, and components don't require core changes.
+- **Testable:** Each component, action, and system can be tested in isolation.
+
+### 8. Design Constraints & Decisions
+
+#### Component Metadata Is Mandatory
+
+Every component class must declare a schema. No implicit relationships. This costs a bit of
+upfront definition but saves enormous debugging pain later.
+
+#### Systems Are Explicit About Dependencies
+
+No magic ordering. Systems declare what they need; the engine ensures they run when safe.
+
+#### All Mutations Go Through World
+
+No side effects hidden in systems. All state changes go through `World` methods, which validate
+against component schemas.
+
+#### Actions Are Synchronous
+
+An action validates and executes atomically. Complex behaviors (multi-turn spells, queued
+construction) are represented as state (a `Spell` component tracking remaining duration) plus
+an action system that processes that state each turn.
+
+#### Events Are Immutable & Detailed
+
+Once emitted, an event cannot be changed. Events contain all context needed to understand what
+happened without looking elsewhere.
+
+### 9. Extensibility Examples
+
+#### Adding a New Unit Type (e.g., Mage)
+
+- Define new components: `Mana`, `SpellList`.
+- Create `CastSpell` action class (if not already exists).
+- Define spell templates (fire bolt, heal, etc.).
+- Everything else works. The `ActionSystem` processes `CastSpell` like any other action.
+
+No changes to core engine.
+
+#### Adding a Faction System
+
+- Define `Faction` and `FactionRelation` components.
+- Create systems: `DiplomacySystem` (processes trade agreements), `ReputationSystem`
+  (updates relations based on actions).
+- Define new actions: `ProposeAlliance`, `DeclareTax`.
+- Systems run in main loop; actions work like everything else.
+
+No changes to core engine.
+
+#### Adding a Tech Tree
+
+- Define `ResearchQueue` and `TechnologyUnlocked` components.
+- Create `ResearchSystem` that progresses research each turn.
+- Create `UnlockTechnology` action.
+- Integrate with validation: certain structures require certain techs (checked in action
+  validate).
+
+No changes to core engine.
+
+### 10. This Layer in the Development Plan
+
+#### Phase 1 Extensions
+
+In Phase 1 (Foundation), build the core abstractions:
+
+- Component schema system with validation.
+- System dependency declaration and topological sorting.
+- Action protocol and `ActionSystem`.
+- `World` query interface.
+- Event types and `EventBus`.
+
+Implement one complete example cycle: a `Produce` action (validates resources, executes, emits
+`ProductionEvent`) + a `ProductionSystem` (processes produce actions via events).
+
+#### Phase 2 Integration
+
+In Phase 2 (Turn Loop), use these abstractions to build the full loop. Everything snaps into
+place cleanly.
+
+#### Phase 3+ Extensibility Test
+
+In Phase 3 (Assess), add a second mechanic (spell system, faction diplomacy, etc.) without
+touching the core engine. If it works cleanly, the abstraction is sound.
+
+## Summary of ARCHITECTURE Layer
+
+The engine needs three core abstractions:
+
+- **Components know what they need** (schemas, validation).
+- **Systems know what they need** (dependencies, phases).
+- **Actions are a protocol** (validate, execute, emit).
+
+Combined with a queryable `World` and an event-driven architecture, these let you add new
+mechanics indefinitely without refactoring the core. Everything is explicit, testable, and
+observable.
+
+This isn't overengineering for a 4X game. It's the minimum needed to avoid the "we have to
+rewrite this" moment at scale.
+
+---
+
 ### Entity Model
 
 - **Flat hierarchy:** No nested structures — everything is an entity.
@@ -163,9 +562,10 @@ Rationale: type-safety, predictable initialization, fewer lazy-init bugs.
 
 ### System Execution Order
 
-- **Decision:** Manual orchestration in `Game` class; explicit ordering of systems.
-- **Rationale:** Simpler debugging at Phase 1 scale.
-        Example order: ResourceProduction → Movement → Decay.
+- **Decision:** Declarative dependencies with topological sorting
+  (see ARCHITECTURE section below for details).
+- **Rationale:** Self-documenting execution order; new systems integrate without core changes.
+        Systems declare dependencies; engine builds and executes the graph automatically.
 
 ### Determinism & RNG
 
