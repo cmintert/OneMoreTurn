@@ -224,7 +224,39 @@ All systems use the same interface. No hidden magic.
 **Implementation:** `World` provides methods like `query(ComponentType1, ComponentType2)` returning
 entities, `add_component()`, `remove_component()`. No magic; just declarative, composable queries.
 
-### 7. Putting It Together: The Turn Loop
+### 7. Fog of War & Visibility
+
+Visibility is a core mechanic in 4X games. The event and state system must
+anticipate it from the start.
+
+**Visibility Model:**
+
+- Every entity has a visibility scope: which players can see it and what information
+  they receive.
+- Events are labeled with visibility metadata: `visibility_scope: [player_ids]`.
+- When generating turn reports or state snapshots for a player, filter events and
+  state to only what that player can observe.
+- Entities outside a player's visibility are either hidden or shown with stale
+  (last-seen) data.
+
+**Implementation:**
+
+- Add `VisibilityComponent` with fields: `visible_to: [player_ids]`, `revealed_to:
+  [player_ids]` (for fog of war vs. fog of knowledge).
+- Events carry `visibility_scope` field; subscribers filter before emitting to
+  players.
+- `World.query()` accepts a `visible_to_player` parameter; by default, returns all
+  entities (unfiltered for admin/replay). Player-facing queries are filtered.
+- Turn reports are generated per-player by filtering events through visibility.
+
+**Benefits:**
+
+- Visibility is explicit and queryable, not an afterthought.
+- Events serve dual purpose: game log (admin/replay sees all) and player report
+  (filtered to visibility).
+- Enables fog of war mechanics without special casing.
+
+### 8. Putting It Together: The Turn Loop
 
 A turn resolves like this:
 
@@ -249,7 +281,7 @@ Key properties:
 - **Extensible:** New actions, systems, and components don't require core changes.
 - **Testable:** Each component, action, and system can be tested in isolation.
 
-### 8. Design Constraints & Decisions
+### 9. Design Constraints & Decisions
 
 #### Component Metadata Is Mandatory
 
@@ -276,7 +308,7 @@ an action system that processes that state each turn.
 Once emitted, an event cannot be changed. Events contain all context needed to understand what
 happened without looking elsewhere.
 
-### 9. Extensibility Examples
+### 10. Extensibility Examples
 
 #### Adding a New Unit Type (e.g., Mage)
 
@@ -307,7 +339,7 @@ No changes to core engine.
 
 No changes to core engine.
 
-### 10. This Layer in the Development Plan
+### 11. This Layer in the Development Plan
 
 #### Phase 1 Extensions
 
@@ -349,18 +381,40 @@ rewrite this" moment at scale.
 
 ---
 
+### Player API Abstraction
+
+- **UUIDs are internal only.** Players never see, reference, or type UUIDs.
+- **Players work with names.** All player-facing API uses human-readable names for entities.
+- **Name-to-UUID mapping is transparent.** The system translates player names to entity IDs
+  internally; the translation is invisible to the player.
+
+Example: A player submits an order like `"move fleet 'Alpha Squadron' to system 'Sirius'"`.
+Internally, the system resolves `'Alpha Squadron'` to its UUID and `'Sirius'` to its UUID,
+then executes the action. The player never types or sees a UUID.
+
+**Benefits:**
+
+- **Lower cognitive load:** Players focus on strategy, not administrative bookkeeping.
+- **Better UX:** Names are memorable; UUIDs are not.
+- **Flexibility:** Systems can be renamed without breaking player workflows.
+- **Consistency:** All player actions use consistent naming conventions.
+
 ### Entity Model
 
-- **Flat hierarchy:** No nested structures — everything is an entity.
-- **Spatial references:** Entities reference their parent/container via `parent_id`.
-        This avoids nested objects and keeps entity relationships flat.
+- **Flat storage, hierarchical querying:** All entities are stored flat (no nested
+  objects). Relationships are expressed via component references (`parent_id`).
+- **Arbitrary nesting:** Entities reference their parent/container via `parent_id`
+  (or multiple parents via `ChildComponent`). No depth limit.
+- **Containment is explicit:** Only entities with `ContainerComponent` can contain
+  children. Only entities with `ChildComponent` are contained.
 
-Example: a ship has `parent_id = <star_system_id>` (not embedded in the star system).
+Example: a ship has `parent_id = <fleet_id>` (not embedded in the fleet); a fleet
+has `parent_id = <sector_id>` (not embedded in the sector).
 
 Query pattern example:
 
 ```text
-Give me all entities where parent_id == X
+Give me all entities where parent_id == X AND ChildComponent exists
 ```
 
 ### Turn Resolution
@@ -415,41 +469,6 @@ query_state --game-id "game-123"
 - **Structure:** Static files served from `src/web/`.
 - **Approach:** JS calls FastAPI endpoints; frontend is decoupled from engine internals.
 
-## Development Phases
-
-### Phase 1 — Foundation (1–2 weeks)
-
-Goal: Prove the ECS pattern works and that state is serializable.
-
-- Implement ECS skeleton (`Entity`, `Component`, `System`).
-- Define basic components: `Position`, `Owner`, `Resources`, etc.
-- Build a simple system (e.g., resource production).
-- Implement DB schema and migrations; serialize/deserialize state.
-- Write tests that validate state round-trips.
-
-Deliverable: Working ECS with one complete resource cycle, testable in Python.
-
-### Phase 2 — Turn Loop (2–3 weeks)
-
-Goal: Build a full game loop and make a playable prototype.
-
-- Create Typer CLI commands.
-- Implement turn submission and resolution.
-- Build minimal game state (players, resources, one action type).
-- Optional: FastAPI backend + static web UI to visualize state and submit orders.
-- Write scenarios/tests that exercise the loop.
-
-Deliverable: Playable game via CLI or browser (5–10 turns).
-
-### Phase 3 — Assess (1 week)
-
-Goal: Evaluate design, identify friction, and decide next steps.
-
-- Play the game and surface issues in the ECS pattern or mechanics.
-- Decide whether to continue, pivot, or stop.
-
-Deliverable: Clear decision and roadmap for Phase 4.
-
 ## Architectural Decisions (Locked)
 
 ### Entity ID & Referencing
@@ -495,12 +514,46 @@ Rationale: type-safety, predictable initialization, fewer lazy-init bugs.
 
 ### Determinism & RNG
 
-- **Decision:** Seeded RNG per system per turn. Seed = `(game_id, turn_number, system_name)`.
-- **Rationale:** Reproducible turn resolution for PBEM. Each system gets its own RNG state so that
-  execution order is part of the determinism contract. Adding new systems does not cause
-  non-deterministic behavior due to RNG state consumption by earlier systems.
-- **Important Note:** When multiple systems call RNG in the same turn, the order in which systems
-  execute affects outcomes. This is intentional and documented as part of the determinism guarantee.
+- **Decision:** Seeded RNG per system per turn. Seed = `(game_id, turn_number,
+  system_name)`.
+- **Rationale:** Reproducible turn resolution for PBEM. Each system gets its own RNG
+  state so that execution order is part of the determinism contract. Adding new
+  systems does not cause non-deterministic behavior due to RNG state consumption by
+  earlier systems.
+- **Important Note:** When multiple systems call RNG in the same turn, the order in
+  which systems execute affects outcomes. This is intentional and documented as part
+  of the determinism guarantee.
+
+### Save Format Versioning & Migrations
+
+- **Decision:** Every saved game state includes a `format_version` field (semantic
+  versioning: "1.0.0"). Component schemas include their own version. Migrations are
+  chainable functions stored in a registry.
+- **Mechanism:**
+  1. On save: include `format_version` in the root JSON snapshot and component
+     schema versions in each component's metadata.
+  2. On load: read `format_version`, look up migration chain from registry, apply
+     migrations in order to transform the snapshot to current format.
+  3. Migrations are idempotent: applying the same migration twice produces the same
+     result.
+  4. Migration registry: `migrations = {("1.0.0" -> "1.1.0"): migration_fn, ...}`.
+     Engine applies them in dependency order.
+- **Rationale:** Supports iterative schema evolution without breaking old saves.
+  Backward compatibility guaranteed; forward compatibility rejected (can't load from
+  future versions). Clear audit trail of what changed and why.
+
+**Example:**
+
+```text
+v1.0.0: ResourceComponent has {amount, capacity}
+v1.1.0: Split capacity -> max_storage (for inventory), max_energy (for power)
+Migration: if ResourceComponent exists, create separate components or split fields
+v1.2.0: Rename Component.owner_id -> Component.controller_id
+Migration: ResourceComponent.owner_id -> ResourceComponent.controller_id
+```
+
+On load, engine checks version, applies migrations in order, validates result
+against current schemas.
 
 ### Conflict Resolution & Order Precedence
 
@@ -516,23 +569,120 @@ Rationale: type-safety, predictable initialization, fewer lazy-init bugs.
 
 ### Turn Submission & Validation
 
-- **Decision:** Strict validation: reject entire submission if any order is invalid.
-- **Rationale:** Simpler, clearer behavior and error feedback.
+- **Decision:** Per-order validation; invalid orders are rejected individually with
+  clear feedback. Valid orders proceed; invalid ones are reported to the player but
+  do not block the submission.
+- **Rationale:** Better UX — one typo doesn't cost a player the entire turn.
+  Validation happens at submission time and again at turn resolution (redundant
+  validation is safe).
 
-### Spatial Hierarchy
+### Order Submission Window
 
-- **Decision:** One-level spatial model; entities reference `parent_id`.
-- **Rationale:** Simpler queries and spatial logic.
+- **Decision:** Orders can be submitted and updated until the turn is evaluated
+  (resolved).
+- **Rationale:** Allows players to revise orders before the turn lock without
+  explicit amendment logic. On evaluation, only the current state of each order is
+  processed.
+
+### Spatial Hierarchy & Containment
+
+- **Decision:** Arbitrary nesting via `ContainerComponent` and `ChildComponent`.
+  No depth limit. All spatial relationships expressed as parent-child references.
+- **Rationale:** Supports 4X domain naturally (galaxy > system > planet > surface slot;
+  fleet > subfleet > ship). Containment constraints are declared per component, not
+  hardcoded. Queries remain simple: "get all entities where parent_id == X".
 
 ### Testing Strategy
 
-- **Decision:** Factory functions for unit tests + seed-based scenarios for integration tests.
+- **Decision:** Isolated, order-independent tests using function-scoped fixtures, layered
+  factories, and event-based assertions.
 
-Example fixture:
+#### Core Principles
+
+- **Isolation:** Every test creates its own `World` instance. No shared mutable state between
+  tests. A test that passes in isolation must pass in any order.
+- **No filesystem:** Use in-memory SQLite (`:memory:`) per test. No test touches the real DB
+  or leaves files behind.
+- **Function-scoped fixtures only:** `pytest` fixtures default to function scope. Never use
+  module- or session-scoped fixtures for mutable state (game world, DB, event bus).
+- **Fixed seeds:** All RNG-dependent tests pin seed inputs explicitly. Tests are deterministic
+  by construction.
+
+#### Assert on Events, Not Just State
+
+The event bus is the record of truth. Prefer asserting on emitted events over inspecting
+component state directly. This validates the observable behavior contract and catches silent
+state corruption.
 
 ```python
-GameFactory.create_game_with_players(2)
+events = world.event_bus.emitted
+assert any(e.type == "UnitMoved" and e.entity_id == ship_id for e in events)
 ```
+
+State assertions are still valid for verifying the final world, but events should be the
+primary signal for what *happened*.
+
+#### Layered Test Factories
+
+Tests need different levels of setup depending on what they are testing:
+
+- **`ComponentBuilder`** — construct a single component with specific field values; for
+  testing validation rules and schema constraints in isolation.
+- **`EntityBuilder`** — create an entity with an explicit set of components; for testing
+  actions and systems against minimal world state.
+- **`WorldBuilder`** — compose a `World` with only the entities and components a given system
+  or action needs; avoids coupling tests to full game setup.
+- **`ScenarioBuilder`** — full seeded game state (players, map, orders) for integration tests
+  and replay validation.
+
+```python
+# Unit: test a single action against minimal state
+world = WorldBuilder().with_entity(ship_id, [PositionComponent(...), OwnerComponent(...)]).build()
+
+# Integration: full seeded scenario
+scenario = ScenarioBuilder.create_game_with_players(2, seed=42)
+```
+
+#### Test Layers
+
+Each layer tests a distinct scope and should not reach into lower layers unnecessarily:
+
+| Layer | Scope | Tools |
+| --- | --- | --- |
+| **Component** | Validation rules, schema constraints, migrations | `ComponentBuilder` |
+| **Action** | `validate()` and `execute()` given a world state | `EntityBuilder` |
+| **System** | Entities with required components → events + state | `WorldBuilder` |
+| **Turn loop** | Full resolution: orders in → events + snapshot out | `ScenarioBuilder` |
+
+#### Determinism Tests
+
+The determinism contract is itself a testable property. Maintain a dedicated suite that:
+
+1. Resolves a seeded turn once and captures the output snapshot.
+2. Resolves the same turn again (same seed, same orders, same state).
+3. Asserts the two outputs are byte-for-byte identical.
+
+This guards against accidental RNG state leakage, non-deterministic iteration order (dict
+ordering, set ordering), and system execution order regressions.
+
+#### Invariant / Property-Based Tests
+
+Use `hypothesis` to verify ECS invariants that must hold across arbitrary world states:
+
+- An entity with `Poison` always has `Health`.
+- `ContainerComponent` capacity is never exceeded.
+- Removing a required component from an entity raises a validation error.
+- Every event has `who`, `what`, `turn_number`, and `why` fields populated.
+
+These tests complement example-based tests by exploring edge cases automatically.
+
+#### What Not to Test
+
+- Internal ECS bookkeeping (entity UUID generation, index structures) — test the interface,
+  not the implementation.
+- Log formatting — logs are for humans; assert on structured event data instead.
+- Migration correctness by re-running production migrations — use dedicated migration unit
+  tests with synthetic old-format fixtures.
 
 ## Key Design Decisions (Deferred)
 
