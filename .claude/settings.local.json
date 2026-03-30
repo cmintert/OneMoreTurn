@@ -7,7 +7,22 @@
       "Bash(grep -n \"^.\\\\{101,\\\\}\" DESIGN.md)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(npx markdownlint-cli:*)"
+      "Bash(npx markdownlint-cli:*)",
+      "Bash(git -C \"c:/Users/chris/VSCodeProjects/OneMoreTurn/OneMoreTurn\" remote -v)",
+      "Bash(python -m venv .venv)",
+      "Bash(.venv/Scripts/activate)",
+      "Bash(pip install:*)",
+      "Bash(.venv/Scripts/python -m pytest)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_events.py -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_rng.py -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_components.py -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_entity.py -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_world.py -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_systems.py -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_containment.py -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_integration.py -v)",
+      "Bash(.venv/Scripts/python -m pytest -v)"
     ]
   }
 }
