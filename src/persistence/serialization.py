@@ -213,3 +213,77 @@ def deserialize_world(snapshot: dict, registry: ComponentRegistry) -> World:
         world.create_entity(components, entity_id=entity_id)
 
     return world
+
+
+# ---------------------------------------------------------------------------
+# Action serialization
+# ---------------------------------------------------------------------------
+
+
+class ActionRegistry:
+    """Maps action_type() strings to Action classes for deserialization.
+
+    Mirrors ComponentRegistry but for actions.
+    """
+
+    def __init__(self) -> None:
+        self._registry: dict[str, type] = {}
+
+    def register(self, *action_classes: type) -> None:
+        """Register one or more action classes."""
+        for cls in action_classes:
+            self._registry[cls.action_type()] = cls
+
+    def get(self, name: str) -> type:
+        """Look up a class by action_type(). Raises KeyError if not registered."""
+        if name not in self._registry:
+            raise KeyError(f"Action '{name}' not registered in ActionRegistry")
+        return self._registry[name]
+
+    def all(self) -> dict[str, type]:
+        """Return a copy of the full registry."""
+        return dict(self._registry)
+
+
+def serialize_action(action: Any) -> dict[str, Any]:
+    """Serialize an Action to a JSON-compatible dict.
+
+    Returns a dict with action_type, player_id, order_id, and a data dict
+    of all remaining dataclass fields.
+    """
+    import dataclasses as _dc
+
+    cls = type(action)
+    data = {}
+    if _dc.is_dataclass(action):
+        for f in _dc.fields(action):
+            value = getattr(action, f.name)
+            data[f.name] = _serialize_value(value)
+
+    return {
+        "action_type": cls.action_type(),
+        "player_id": str(action.player_id),
+        "order_id": str(action.order_id),
+        "data": data,
+    }
+
+
+def deserialize_action(record: dict[str, Any], registry: ActionRegistry) -> Any:
+    """Reconstruct an Action from its serialized dict record."""
+    import dataclasses as _dc
+
+    cls = registry.get(record["action_type"])
+    data = dict(record.get("data", {}))
+
+    if _dc.is_dataclass(cls):
+        hints = _get_type_hints_safe(cls)
+        component_registry = ComponentRegistry()
+        for field_name in list(data):
+            hint = hints.get(field_name)
+            if hint is not None:
+                # Re-use the component value deserializer for UUID handling
+                data[field_name] = _deserialize_value(
+                    data[field_name], hint, component_registry
+                )
+
+    return cls(**data)

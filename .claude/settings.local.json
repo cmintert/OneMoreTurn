@@ -22,7 +22,14 @@
       "Bash(.venv/Scripts/python -m pytest tests/test_systems.py -v)",
       "Bash(.venv/Scripts/python -m pytest tests/test_containment.py -v)",
       "Bash(.venv/Scripts/python -m pytest tests/test_integration.py -v)",
-      "Bash(.venv/Scripts/python -m pytest -v)"
+      "Bash(.venv/Scripts/python -m pytest -v)",
+      "Bash(.venv/Scripts/python -m pytest --tb=short)",
+      "Bash(grep -E \"\\\\.md$|\\\\.txt$\")",
+      "Bash(python -m pytest tests/test_serialization.py tests/test_migrations.py tests/test_persistence.py -v)",
+      "Bash(python -m pytest --tb=short -q)",
+      "Bash(python -m pytest tests/test_persistence.py -v --tb=short)",
+      "Bash(python -m pytest tests/test_actions.py tests/test_turn.py -v --tb=short)",
+      "Bash(python -m pytest tests/ --tb=short -q)"
     ]
   }
 }

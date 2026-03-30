@@ -6,11 +6,15 @@ import json
 import sqlite3
 import time
 import uuid
+from typing import TYPE_CHECKING, Any
 
 from engine.ecs import World
 from engine.events import Event
 from persistence.migrations import MigrationRegistry
 from persistence.serialization import ComponentRegistry, deserialize_world, serialize_world
+
+if TYPE_CHECKING:
+    from persistence.serialization import ActionRegistry
 
 
 class GameDatabase:
@@ -60,6 +64,17 @@ class GameDatabase:
                 order_id    TEXT,
                 context     TEXT,
                 message     TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS orders (
+                order_id    TEXT NOT NULL,
+                game_id     TEXT NOT NULL,
+                turn_number INTEGER NOT NULL,
+                player_id   TEXT NOT NULL,
+                action_type TEXT NOT NULL,
+                action_data TEXT NOT NULL,
+                submitted_at REAL NOT NULL,
+                PRIMARY KEY (order_id, game_id, turn_number)
             );
             """
         )
@@ -194,3 +209,74 @@ class GameDatabase:
     def close(self) -> None:
         """Close the underlying SQLite connection."""
         self._conn.close()
+
+    # -- Order persistence --
+
+    def save_orders(
+        self,
+        game_id: str,
+        turn_number: int,
+        actions: list[Any],
+    ) -> None:
+        """Persist a list of actions (orders) for a turn.
+
+        Each action is serialized via ``serialize_action()`` and stored
+        in the ``orders`` table.
+        """
+        from persistence.serialization import serialize_action
+
+        rows = []
+        for action in actions:
+            record = serialize_action(action)
+            rows.append((
+                record["order_id"],
+                game_id,
+                turn_number,
+                record["player_id"],
+                record["action_type"],
+                json.dumps(record["data"], sort_keys=True),
+                time.time(),
+            ))
+        with self._conn:
+            self._conn.executemany(
+                """
+                INSERT OR REPLACE INTO orders
+                    (order_id, game_id, turn_number, player_id,
+                     action_type, action_data, submitted_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+
+    def load_orders(
+        self,
+        game_id: str,
+        turn_number: int,
+        action_registry: ActionRegistry,
+    ) -> list[Any]:
+        """Load and deserialize orders for a turn.
+
+        Returns a list of Action objects.
+        """
+        from persistence.serialization import deserialize_action
+
+        rows = self._conn.execute(
+            """
+            SELECT order_id, player_id, action_type, action_data
+            FROM orders
+            WHERE game_id = ? AND turn_number = ?
+            ORDER BY order_id
+            """,
+            (game_id, turn_number),
+        ).fetchall()
+
+        actions = [
+            deserialize_action({
+                "order_id": row["order_id"],
+                "player_id": row["player_id"],
+                "action_type": row["action_type"],
+                "data": json.loads(row["action_data"]),
+            }, action_registry)
+            for row in rows
+        ]
+        return actions

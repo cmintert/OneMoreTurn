@@ -4,17 +4,21 @@ build-backend = "hatchling.build"
 
 [project]
 name = "onemoreturn-engine"
-version = "0.1.0"
+version = "0.2.0"
 description = "ECS engine for OneMoreTurn PBEM 4X game"
 requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
 test = ["pytest>=7.0", "hypothesis>=6.0"]
+cli = ["typer>=0.9"]
+
+[project.scripts]
+onemoreturn = "cli.main:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/engine"]
+packages = ["src/engine", "src/persistence", "src/cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "tests"]
