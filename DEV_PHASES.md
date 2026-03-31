@@ -220,15 +220,199 @@ resolved or explicitly re-deferred with rationale. Roadmap for Phase 6+ exists.
 
 ---
 
-## Phase 6+ — TBD
+# Phase 6: Dead Simple Web UI
 
-Determined by Phase 5 assessment. Likely candidates:
+## Overview
 
-- FastAPI backend (turn submission over HTTP, player auth, game hosting).
-- Web frontend (vanilla HTML/CSS/JS, calls FastAPI, visualizes state).
-- Additional game mechanics (based on playtesting feedback).
-- Postgres migration (when SQLite per-game-file becomes a limitation).
-- Multiplayer infrastructure (notification emails, PBEM file exchange).
+Phase 6 builds a **minimal web interface** to visualize and play the game. No FastAPI, no authentication, no database migration. The Python CLI engine stays as-is; this layer wraps it in a web UI.
+
+**Goal:** You can see the galaxy, see your fleets, submit moves, resolve turns, and understand what's happening.
+
+**Success criteria:**
+- Load an existing game (or create one)
+- View current turn state as a readable galaxy map
+- Submit actions via forms
+- Resolve turns via button click
+- See updated state after each turn
+- Play a full 15–20 turn game without confusion
+
+**Scope:** ~3–5 days of focused work.
+
+---
+
+## Architecture
+
+### Technology Stack
+
+| Layer | Tech |
+|-------|------|
+| **Backend** | Existing Python CLI + Python HTTP server wrapper |
+| **Frontend** | vanilla HTML/CSS/JS in `src/web/` |
+| **Data format** | JSON exported from game state (existing serialization) |
+| **Storage** | SQLite (unchanged from Phase 4) |
+
+### Design Philosophy
+
+- **Zero FastAPI.** We import the Python game module directly and call functions.
+- **No build step.** If using React, it's inline (jsx artifact). If vanilla JS, it's static HTML in `src/web/`.
+- **Game logic stays in Python.** The UI is 100% display + form submission; all validation and turn resolution happens in the engine.
+- **Deterministic state display.** UI reads snapshots and renders them; no client-side game state.
+
+---
+
+## What Gets Built
+
+### Backend (Python CLI Enhancement)
+
+Add one new module: `src/cli/json_export.py`
+
+**Purpose:** Export current game state as JSON suitable for frontend consumption.
+
+**Exports:**
+- `export_game_state(game_id: str) -> dict` — returns:
+  ```json
+  {
+    "turn": 5,
+    "players": [
+      {
+        "id": "uuid",
+        "name": "Player A",
+        "resources": { "metal": 100, "fuel": 50 },
+        "fleets": [
+          {
+            "id": "uuid",
+            "name": "Fleet 1",
+            "position": { "system_id": "uuid", "x": 10, "y": 20 },
+            "speed": 3,
+            "resources": { "metal": 10 }
+          }
+        ],
+        "planets": [
+          {
+            "id": "uuid",
+            "name": "Homeworld",
+            "position": { "x": 5, "y": 5 },
+            "resources": { "metal": 500 },
+            "population": 1000
+          }
+        ]
+      }
+    ],
+    "star_systems": [
+      {
+        "id": "uuid",
+        "name": "Sol",
+        "position": { "x": 5, "y": 5 },
+        "planets": [...]
+      }
+    ],
+    "visible_to": "player_id" (fog of war filtering)
+  }
+  ```
+
+- `list_games() -> list[dict]` — returns list of available games with name, last turn, players.
+
+- `create_game_from_ui(name, num_players) -> dict` — creates game, returns initial state.
+
+- `submit_action(game_id, player_id, action_type, action_data) -> ValidationResult` — validates and queues an action.
+
+- `resolve_turn(game_id) -> dict` — resolves turn, returns new state.
+
+### Frontend
+
+#### Option A: React Artifact (recommended for speed)
+
+Single `.jsx` artifact that:
+1. **Sidebar:** Game list; button to create new game; player name/resources display
+2. **Map canvas:** SVG or canvas showing star systems as dots, planets as smaller dots, fleets as triangles
+3. **Fleet/action panel:** Select a fleet → show speed/position → form to set destination → "Submit Move" button
+4. **Events log:** Last 5 events from the turn
+5. **Turn counter & resolve button:** Current turn number; big button to resolve turn
+
+Minimal interactivity:
+- Click a fleet on the map → select it
+- Click a destination system → set move target
+- Click "Submit" → calls backend, updates display
+- Click "Resolve Turn" → resolves, refreshes state
+
+#### Option B: Vanilla HTML/CSS/JS in `src/web/`
+
+Same structure, but as three separate files:
+- `index.html` — layout
+- `style.css` — styling
+- `game.js` — DOM manipulation and backend calls
+
+---
+
+## Tasks (Minimal)
+
+### Backend (Python)
+
+1. **Create `src/cli/json_export.py`**
+   - `export_game_state()` — serialize visible entities for current player
+   - `list_games()` — return available games
+   - `create_game_from_ui()` — wrapper around existing CLI create_game
+   - `submit_action()` — wrapper around existing CLI submit_orders
+   - `resolve_turn()` — wrapper around existing CLI resolve_turn
+
+2. **Add `src/cli/server.py`** (optional, but helpful)
+   - Simple Flask or built-in `http.server` that serves static files + JSON exports
+   - Endpoints: GET `/api/games`, GET `/api/game/:id`, POST `/api/game/:id/action`, POST `/api/game/:id/resolve`
+   - No authentication; local development only
+
+### Frontend
+
+1. **Create React artifact (or static HTML)**
+   - Galaxy map display (SVG)
+   - Fleet/planet list sidebar
+   - Action submission forms
+   - Turn resolution button
+   - Events log
+
+2. **Connect to backend**
+   - Fetch `/api/games` on load
+   - Fetch `/api/game/:id` to get current state
+   - POST to submit actions
+   - POST to resolve turn
+   - Auto-refresh after turn resolution
+
+---
+
+## Exit Criteria
+
+✓ Create a new game via web UI
+✓ See galaxy map with at least 3 star systems and 6+ planets
+✓ View current fleet positions and resources
+✓ Submit a "move fleet" action and see validation feedback
+✓ Resolve a turn and see updated positions
+✓ Play 15 turns without console errors
+✓ Game state is correct after each turn (no silent corruption)
+
+---
+
+## Not in Phase 6 (Deferred to Phase 7+)
+
+- FastAPI backend
+- Player authentication
+- Postgres migration
+- Turn email notifications
+- Multi-server multiplayer hosting
+- Undo/save/load UI
+- Advanced game mechanics UI (research, diplomacy, etc.)
+
+---
+
+## What Changes, What Doesn't
+
+**Unchanged:** All Python engine code (Phases 1–5), CLI commands, database schema.
+
+**New:** One `json_export.py` module, one optional `server.py`, one frontend (React or static HTML).
+
+**Updated:** This file (DEV_PHASES.md) to clarify Phase 6 scope.
+
+---
+
+*End of Phase 6 specification.*
 
 ---
 
