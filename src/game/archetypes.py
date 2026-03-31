@@ -12,6 +12,7 @@ from game.components import (
     Owner,
     PopulationStats,
     Position,
+    ResearchComponent,
     Resources,
     VisibilityComponent,
 )
@@ -83,5 +84,19 @@ def create_fleet(
             FleetStats(speed=speed, capacity=50.0, condition=100.0),
             Resources(amounts=cargo or {}, capacity=50.0),
             VisibilityComponent(),
+        ]
+    )
+
+
+def create_civilization(
+    world: World,
+    player_id: uuid.UUID,
+    player_name: str,
+) -> Entity:
+    """Create a civilization entity that tracks per-player research state."""
+    return world.create_entity(
+        [
+            Owner(player_id=player_id, player_name=player_name),
+            ResearchComponent(),
         ]
     )

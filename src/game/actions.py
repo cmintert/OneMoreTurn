@@ -14,8 +14,10 @@ from game.components import (
     Owner,
     PopulationStats,
     Position,
+    ResearchComponent,
     Resources,
 )
+from game.registry import action
 
 
 def _check_fleet_ownership(fleet, player_id: uuid.UUID, errors: list[str]) -> None:
@@ -34,6 +36,7 @@ def _check_same_system(fleet, planet, errors: list[str]) -> None:
         errors.append("Fleet and planet not at same star system")
 
 
+@action
 @dataclass
 class MoveFleetAction(Action):
     """Order a fleet to move to a target star system.
@@ -147,6 +150,7 @@ class MoveFleetAction(Action):
         ]
 
 
+@action
 @dataclass
 class ColonizePlanetAction(Action):
     """Colonize an unowned planet using a fleet at the same star system.
@@ -262,6 +266,7 @@ class ColonizePlanetAction(Action):
         return f"colonize:{self.planet_id}"
 
 
+@action
 @dataclass
 class HarvestResourcesAction(Action):
     """Transfer resources from an owned planet to a fleet at the same system.
@@ -379,6 +384,93 @@ class HarvestResourcesAction(Action):
                     "resource": self.resource_type,
                     "amount": self.amount,
                     "from_planet": str(planet.id),
+                },
+                visibility_scope=[str(self._player_id)],
+            )
+        ]
+
+
+@action
+@dataclass
+class StartResearchAction(Action):
+    """Begin researching a propulsion technology.
+
+    The player specifies which civilization entity to research with and
+    which tech_id to research.  The tech must exist in PROPULSION_TECHS,
+    must not already be unlocked, and the civ must not be mid-research.
+    """
+
+    _player_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    _order_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    civ_entity_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    tech_id: str = ""
+
+    @classmethod
+    def action_type(cls) -> str:
+        """Registry key identifying this action type for serialization."""
+        return "StartResearch"
+
+    @property
+    def player_id(self) -> uuid.UUID:
+        """UUID of the player who issued this order."""
+        return self._player_id
+
+    @property
+    def order_id(self) -> uuid.UUID:
+        """Unique identifier for this order; used for replacement and tracking."""
+        return self._order_id
+
+    def validate(self, world) -> ValidationResult:
+        """Check entity exists, is owned, has ResearchComponent, tech is valid."""
+        from game.systems import PROPULSION_TECHS
+
+        errors: list[str] = []
+
+        try:
+            civ = world.get_entity(self.civ_entity_id)
+        except KeyError:
+            return ValidationResult(valid=False, errors=["Civilization entity not found"])
+
+        if not civ.has(Owner):
+            errors.append("Entity has no Owner")
+        elif civ.get(Owner).player_id != self._player_id:
+            errors.append("Entity not owned by player")
+
+        if not civ.has(ResearchComponent):
+            errors.append("Entity has no ResearchComponent")
+        else:
+            research = civ.get(ResearchComponent)
+            if research.active_tech_id is not None:
+                errors.append("Already researching a technology")
+            if self.tech_id in research.unlocked_techs:
+                errors.append(f"Technology '{self.tech_id}' already unlocked")
+
+        if self.tech_id not in PROPULSION_TECHS:
+            errors.append(f"Unknown technology '{self.tech_id}'")
+
+        return ValidationResult(valid=len(errors) == 0, errors=errors)
+
+    def execute(self, world) -> list[Event]:
+        """Set active research on the civilization entity."""
+        from game.systems import PROPULSION_TECHS
+
+        civ = world.get_entity(self.civ_entity_id)
+        research = civ.get(ResearchComponent)
+        tech_def = PROPULSION_TECHS[self.tech_id]
+
+        research.active_tech_id = self.tech_id
+        research.progress = 0.0
+        research.required_progress = float(tech_def["cost"])
+
+        return [
+            Event(
+                who=civ.id,
+                what="ResearchStarted",
+                when=world.current_turn,
+                why=str(self._order_id),
+                effects={
+                    "tech_id": self.tech_id,
+                    "turns_required": tech_def["cost"],
                 },
                 visibility_scope=[str(self._player_id)],
             )

@@ -6,7 +6,7 @@ import uuid
 
 from engine.ecs import World
 from engine.rng import SystemRNG
-from game.archetypes import create_fleet, create_planet, create_star_system
+from game.archetypes import create_civilization, create_fleet, create_planet, create_star_system
 
 
 def setup_game(
@@ -48,6 +48,7 @@ def setup_game(
             speed=5.0,
             cargo={"minerals": 10.0, "energy": 5.0},
         )
+        create_civilization(world, pid, pname)
 
     neutral_systems = [
         ("Alpha", 30.0, 30.0),

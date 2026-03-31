@@ -16,14 +16,17 @@ from game.components import (
     Owner,
     PopulationStats,
     Position,
+    ResearchComponent,
     Resources,
     VisibilityComponent,
 )
+from game.registry import system
 
 if TYPE_CHECKING:
     from engine.ecs import World
 
 
+@system
 class ProductionSystem(System):
     """Generates resources and grows population on all colonized planets each turn.
 
@@ -103,6 +106,7 @@ class ProductionSystem(System):
             )
 
 
+@system
 class MovementSystem(System):
     """Advances in-transit fleets toward their destinations each turn.
 
@@ -195,6 +199,7 @@ class MovementSystem(System):
                 fleet.turns_remaining = 0
 
 
+@system
 class VisibilitySystem(System):
     """Recomputes fog-of-war for every entity after all MAIN-phase systems finish.
 
@@ -262,3 +267,82 @@ class VisibilitySystem(System):
                         vis.visible_to.add(player_id)
                         vis.revealed_to.add(player_id)
                         break
+
+
+# ---------------------------------------------------------------------------
+# Propulsion tech tree
+# ---------------------------------------------------------------------------
+
+PROPULSION_TECHS: dict[str, dict] = {
+    "ion_drive": {"cost": 3, "speed_multiplier": 1.5},
+    "warp_core": {"cost": 8, "speed_multiplier": 2.5},
+}
+
+
+@system
+class ResearchSystem(System):
+    """Advances research progress each turn and applies tech bonuses on completion.
+
+    When a tech completes, all fleets owned by that player receive the speed
+    multiplier baked into FleetStats.speed.  This means MovementSystem needs
+    no changes — it already reads FleetStats.speed.
+    """
+
+    @classmethod
+    def system_name(cls) -> str:
+        """Identifier used in logging, RNG seeding, and dependency graphs."""
+        return "Research"
+
+    @classmethod
+    def phase(cls) -> str:
+        """MAIN phase: runs after action resolution."""
+        return "MAIN"
+
+    @classmethod
+    def required_components(cls) -> list:
+        """Entities must have ResearchComponent and Owner."""
+        return [ResearchComponent, Owner]
+
+    @classmethod
+    def required_prior_systems(cls) -> list:
+        """Run after ActionSystem so new StartResearch orders are applied first."""
+        return [ActionSystem]
+
+    def update(self, world: World, rng: SystemRNG) -> None:
+        """Advance research and apply speed bonuses on tech completion."""
+        for entity, research, owner in world.query(ResearchComponent, Owner):
+            if research.active_tech_id is None:
+                continue
+
+            research.progress += 1.0
+
+            if research.progress >= research.required_progress:
+                completed_tech = research.active_tech_id
+                research.unlocked_techs.append(completed_tech)
+                tech_def = PROPULSION_TECHS.get(completed_tech, {})
+                multiplier = tech_def.get("speed_multiplier", 1.0)
+
+                # Apply speed bonus to all fleets owned by this player.
+                for fleet_ent, fleet_stats, fleet_owner in world.query(
+                    FleetStats, Owner
+                ):
+                    if fleet_owner.player_id == owner.player_id:
+                        fleet_stats.speed *= multiplier
+
+                research.active_tech_id = None
+                research.progress = 0.0
+                research.required_progress = 0.0
+
+                world.event_bus.publish(
+                    Event(
+                        who=entity.id,
+                        what="TechUnlocked",
+                        when=world.current_turn,
+                        why="ResearchSystem",
+                        effects={
+                            "tech_id": completed_tech,
+                            "speed_multiplier": multiplier,
+                        },
+                        visibility_scope=[str(owner.player_id)],
+                    )
+                )

@@ -7,8 +7,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from engine.components import Component
+from game.registry import component
 
 
+@component
 @dataclass
 class Position(Component):
     """Location in 2D space with optional parent star system reference.
@@ -33,6 +35,7 @@ class Position(Component):
         return "1.0.0"
 
 
+@component
 @dataclass
 class Owner(Component):
     """Marks an entity as owned by a player.
@@ -56,6 +59,7 @@ class Owner(Component):
         return "1.0.0"
 
 
+@component
 @dataclass
 class Resources(Component):
     """Resource stockpile with a named-type dict and a shared capacity ceiling.
@@ -115,6 +119,7 @@ class Resources(Component):
         return errors
 
 
+@component
 @dataclass
 class FleetStats(Component):
     """Movement and cargo state for a fleet entity.
@@ -153,6 +158,7 @@ class FleetStats(Component):
         return {"speed": {"min": 0}, "condition": {"min": 0, "max": 100}}
 
 
+@component
 @dataclass
 class PopulationStats(Component):
     """Population metrics for a colonized planet.
@@ -186,6 +192,7 @@ class PopulationStats(Component):
         return {"size": {"min": 0}, "morale": {"min": 0, "max": 2}}
 
 
+@component
 @dataclass
 class VisibilityComponent(Component):
     """Fog-of-war state for a single entity.
@@ -208,3 +215,35 @@ class VisibilityComponent(Component):
     def version(cls) -> str:
         """Schema version; increment when field names or types change."""
         return "1.0.0"
+
+
+@component
+@dataclass
+class ResearchComponent(Component):
+    """Tracks research progress for a player's civilization entity.
+
+    Each civilization entity has exactly one ResearchComponent.  When
+    active_tech_id is set, progress advances by 1.0 each turn until it
+    reaches required_progress, at which point the tech is completed and
+    added to unlocked_techs.
+    """
+
+    active_tech_id: str | None = None
+    progress: float = 0.0
+    required_progress: float = 0.0
+    unlocked_techs: list[str] = field(default_factory=list)
+
+    @classmethod
+    def component_name(cls) -> str:
+        """Registry key used by serialization to identify this component type."""
+        return "Research"
+
+    @classmethod
+    def version(cls) -> str:
+        """Schema version; increment when field names or types change."""
+        return "1.0.0"
+
+    @classmethod
+    def constraints(cls) -> dict[str, dict[str, Any]]:
+        """Numeric bounds enforced by the base validate() loop."""
+        return {"progress": {"min": 0}, "required_progress": {"min": 0}}
