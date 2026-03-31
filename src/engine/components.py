@@ -118,16 +118,31 @@ class ContainerComponent(Component):
 
     @classmethod
     def component_name(cls) -> str:
+        """Registry key used by serialization to identify this component type."""
         return "Container"
 
     @classmethod
     def version(cls) -> str:
+        """Schema version; increment when field names or types change."""
         return "1.0.0"
 
     @classmethod
     def on_remove_validation(
         cls, world: World, entity_id: uuid.UUID
     ) -> list[str]:
+        """Prevent removal while the container still holds children.
+
+        Enforces the invariant that a container must be emptied before it (or
+        its entity) can be removed.  This guards against orphaned entities whose
+        parent_id would point to a non-existent entity.
+
+        Args:
+            world: The current game world.
+            entity_id: ID of the entity the component will be removed from.
+
+        Returns:
+            list[str]: Error messages; empty if removal is safe.
+        """
         entity = world.get_entity(entity_id)
         if not entity.has(ContainerComponent):
             return []
@@ -149,16 +164,32 @@ class ChildComponent(Component):
 
     @classmethod
     def component_name(cls) -> str:
+        """Registry key used by serialization to identify this component type."""
         return "Child"
 
     @classmethod
     def version(cls) -> str:
+        """Schema version; increment when field names or types change."""
         return "1.0.0"
 
     @classmethod
     def on_add_validation(
         cls, world: World, entity_id: uuid.UUID, component: Component
     ) -> list[str]:
+        """Verify the parent exists, has a ContainerComponent, and can accept children.
+
+        Checks: parent entity existence, parent has ContainerComponent,
+        child entity has one of the allowed child types (if restricted), and
+        the container is not already at capacity.
+
+        Args:
+            world: The current game world.
+            entity_id: ID of the entity being given a ChildComponent.
+            component: The ChildComponent instance being added.
+
+        Returns:
+            list[str]: Error messages; empty if validation passes.
+        """
         assert isinstance(component, ChildComponent)
         errors: list[str] = []
 
@@ -206,6 +237,17 @@ class ChildComponent(Component):
     def on_added(
         cls, world: World, entity_id: uuid.UUID, component: Component
     ) -> None:
+        """Register this entity in the parent container's children list.
+
+        Called by World after the ChildComponent is successfully added.  This
+        is the authoritative way the parent container learns about new children
+        — the children list on ContainerComponent is never set directly.
+
+        Args:
+            world: The current game world.
+            entity_id: ID of the child entity.
+            component: The ChildComponent instance that was just added.
+        """
         assert isinstance(component, ChildComponent)
         parent = world.get_entity(component.parent_id)
         container = parent.get(ContainerComponent)
@@ -216,12 +258,31 @@ class ChildComponent(Component):
     def on_remove_validation(
         cls, world: World, entity_id: uuid.UUID
     ) -> list[str]:
+        """Always permit removal of ChildComponent.
+
+        Unlike ContainerComponent, a child can always be detached from its
+        parent (e.g. when a fleet departs a system mid-flight).
+
+        Returns:
+            list[str]: Always empty.
+        """
         return []  # Always allow removal
 
     @classmethod
     def on_removed(
         cls, world: World, entity_id: uuid.UUID, component: Component
     ) -> None:
+        """Deregister this entity from the parent container's children list.
+
+        Called by World after ChildComponent is removed.  Handles the case
+        where the parent was already destroyed (e.g. star system wiped) by
+        silently returning rather than raising.
+
+        Args:
+            world: The current game world.
+            entity_id: ID of the child entity being detached.
+            component: The ChildComponent instance that was just removed.
+        """
         assert isinstance(component, ChildComponent)
         try:
             parent = world.get_entity(component.parent_id)

@@ -33,6 +33,7 @@ class MigrationRegistry:
     """
 
     def __init__(self) -> None:
+        """Initialise the registry with an empty migration chain."""
         self._migrations: dict[tuple[str, str], Callable[[dict], dict]] = {}
 
     def register(

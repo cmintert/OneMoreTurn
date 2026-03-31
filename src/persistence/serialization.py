@@ -16,6 +16,7 @@ class ComponentRegistry:
     """Maps component_name() strings to component classes for deserialization."""
 
     def __init__(self) -> None:
+        """Initialise an empty registry; call register() to populate it."""
         self._registry: dict[str, type[Component]] = {}
 
     def register(self, *component_classes: type[Component]) -> None:
@@ -188,6 +189,12 @@ def serialize_world(world: World, game_id: str, format_version: str = "1.0.0") -
 
 
 def _has_child_component(entity_record: dict) -> bool:
+    """Return True if the entity snapshot contains a ChildComponent.
+
+    Used during deserialization to order entities so parent entities are
+    created before their children, allowing ChildComponent.on_add_validation
+    to find the parent in the world without raising KeyError.
+    """
     return any(c["component_type"] == "Child" for c in entity_record["components"])
 
 
@@ -228,6 +235,7 @@ class ActionRegistry:
     """
 
     def __init__(self) -> None:
+        """Initialise an empty registry; call register() to populate it."""
         self._registry: dict[str, type] = {}
 
     def register(self, *action_classes: type) -> None:

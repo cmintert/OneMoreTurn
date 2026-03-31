@@ -36,7 +36,12 @@ def _check_same_system(fleet, planet, errors: list[str]) -> None:
 
 @dataclass
 class MoveFleetAction(Action):
-    """Order a fleet to move to a target star system."""
+    """Order a fleet to move to a target star system.
+
+    Sets the fleet's destination on FleetStats and calculates turns_remaining
+    based on Euclidean distance / speed.  Movement is then executed
+    incrementally by MovementSystem each turn until the fleet arrives.
+    """
 
     _player_id: uuid.UUID = field(default_factory=uuid.uuid4)
     _order_id: uuid.UUID = field(default_factory=uuid.uuid4)
@@ -45,17 +50,30 @@ class MoveFleetAction(Action):
 
     @classmethod
     def action_type(cls) -> str:
+        """Registry key identifying this action type for serialization."""
         return "MoveFleet"
 
     @property
     def player_id(self) -> uuid.UUID:
+        """UUID of the player who issued this order."""
         return self._player_id
 
     @property
     def order_id(self) -> uuid.UUID:
+        """Unique identifier for this order; used for replacement and tracking."""
         return self._order_id
 
     def validate(self, world) -> ValidationResult:
+        """Check that the fleet exists, is owned by this player, and is not already moving.
+
+        Also verifies that the target system exists and has a Position.
+
+        Args:
+            world: Current game world.
+
+        Returns:
+            ValidationResult: valid=True if all checks pass; errors otherwise.
+        """
         errors: list[str] = []
 
         try:
@@ -81,6 +99,18 @@ class MoveFleetAction(Action):
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
     def execute(self, world) -> list[Event]:
+        """Set destination on FleetStats and detach fleet from its current system.
+
+        Computes turns_remaining as ceil(distance / speed).  Removes the
+        fleet's ChildComponent so it is no longer counted as being in the
+        origin system while in transit.  Publishes a ``FleetDeparted`` event.
+
+        Args:
+            world: Current game world (mutated in-place).
+
+        Returns:
+            list[Event]: Single FleetDeparted event.
+        """
         fleet = world.get_entity(self.fleet_id)
         target = world.get_entity(self.target_system_id)
 
@@ -119,7 +149,12 @@ class MoveFleetAction(Action):
 
 @dataclass
 class ColonizePlanetAction(Action):
-    """Colonize an unowned planet using a fleet at the same star system."""
+    """Colonize an unowned planet using a fleet at the same star system.
+
+    Adds an Owner component to the planet and seeds it with an initial
+    PopulationStats if none exists.  Multiple players racing to colonize
+    the same planet are subject to conflict resolution via conflict_key().
+    """
 
     _player_id: uuid.UUID = field(default_factory=uuid.uuid4)
     _order_id: uuid.UUID = field(default_factory=uuid.uuid4)
@@ -128,17 +163,30 @@ class ColonizePlanetAction(Action):
 
     @classmethod
     def action_type(cls) -> str:
+        """Registry key identifying this action type for serialization."""
         return "ColonizePlanet"
 
     @property
     def player_id(self) -> uuid.UUID:
+        """UUID of the player who issued this order."""
         return self._player_id
 
     @property
     def order_id(self) -> uuid.UUID:
+        """Unique identifier for this order; used for replacement and tracking."""
         return self._order_id
 
     def validate(self, world) -> ValidationResult:
+        """Check that the fleet exists and is at the same system as the target planet.
+
+        Also verifies that the planet is not already colonized.
+
+        Args:
+            world: Current game world.
+
+        Returns:
+            ValidationResult: valid=True if all checks pass; errors otherwise.
+        """
         errors: list[str] = []
 
         try:
@@ -161,6 +209,18 @@ class ColonizePlanetAction(Action):
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
     def execute(self, world) -> list[Event]:
+        """Transfer ownership to the colonizing player and seed initial population.
+
+        Adds Owner to the planet mirroring the fleet's owner, and adds a
+        default PopulationStats if the planet doesn't already have one.
+        Publishes a ``PlanetColonized`` event.
+
+        Args:
+            world: Current game world (mutated in-place).
+
+        Returns:
+            list[Event]: Single PlanetColonized event.
+        """
         fleet = world.get_entity(self.fleet_id)
         planet = world.get_entity(self.planet_id)
 
@@ -190,12 +250,26 @@ class ColonizePlanetAction(Action):
         ]
 
     def conflict_key(self) -> str | None:
+        """Group all colonize orders targeting the same planet for conflict resolution.
+
+        When multiple players issue ColonizePlanetAction for the same planet in
+        the same turn, only one can win.  ActionSystem uses this key to identify
+        the competing group and resolves it via seeded RNG.
+
+        Returns:
+            str: Conflict key scoped to this planet.
+        """
         return f"colonize:{self.planet_id}"
 
 
 @dataclass
 class HarvestResourcesAction(Action):
-    """Transfer resources from an owned planet to a fleet at the same system."""
+    """Transfer resources from an owned planet to a fleet at the same system.
+
+    Validates that the planet has sufficient resources and the fleet has
+    enough remaining cargo capacity before executing.  This is a one-shot
+    transfer; the full requested amount is moved in a single turn.
+    """
 
     _player_id: uuid.UUID = field(default_factory=uuid.uuid4)
     _order_id: uuid.UUID = field(default_factory=uuid.uuid4)
@@ -206,17 +280,32 @@ class HarvestResourcesAction(Action):
 
     @classmethod
     def action_type(cls) -> str:
+        """Registry key identifying this action type for serialization."""
         return "HarvestResources"
 
     @property
     def player_id(self) -> uuid.UUID:
+        """UUID of the player who issued this order."""
         return self._player_id
 
     @property
     def order_id(self) -> uuid.UUID:
+        """Unique identifier for this order; used for replacement and tracking."""
         return self._order_id
 
     def validate(self, world) -> ValidationResult:
+        """Check ownership, co-location, available resources, and fleet capacity.
+
+        Ensures the player owns both the fleet and the planet, both are in the
+        same star system, the planet has enough of the requested resource type,
+        and the fleet has sufficient remaining cargo capacity.
+
+        Args:
+            world: Current game world.
+
+        Returns:
+            ValidationResult: valid=True if all checks pass; errors otherwise.
+        """
         errors: list[str] = []
 
         try:
@@ -256,6 +345,17 @@ class HarvestResourcesAction(Action):
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
     def execute(self, world) -> list[Event]:
+        """Move the requested amount from the planet's stockpile to the fleet.
+
+        Directly adjusts the amounts dicts on both Resources components.
+        Publishes a ``ResourcesHarvested`` event visible only to the acting player.
+
+        Args:
+            world: Current game world (mutated in-place).
+
+        Returns:
+            list[Event]: Single ResourcesHarvested event.
+        """
         fleet = world.get_entity(self.fleet_id)
         planet = world.get_entity(self.planet_id)
 

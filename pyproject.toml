@@ -12,6 +12,7 @@ dependencies = []
 [project.optional-dependencies]
 test = ["pytest>=7.0", "hypothesis>=6.0"]
 cli = ["typer>=0.9"]
+lint = ["ruff>=0.4"]
 
 [project.scripts]
 onemoreturn = "cli.main:app"
@@ -22,3 +23,10 @@ packages = ["src/engine", "src/persistence", "src/cli", "src/game"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "tests"]
+
+[tool.ruff.lint]
+preview = true
+select = ["PLR0904"]  # too-many-public-methods
+
+[tool.ruff.lint.pylint]
+max-public-methods = 14  # TestWorldRoundTrip is 13 (1 method headroom)

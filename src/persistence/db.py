@@ -25,6 +25,14 @@ class GameDatabase:
     """
 
     def __init__(self, db_path: str = ":memory:") -> None:
+        """Open (or create) the SQLite database at the given path.
+
+        Uses row_factory = sqlite3.Row so callers can access columns by name.
+        Call init_schema() after construction to create the required tables.
+
+        Args:
+            db_path: Filesystem path or ``":memory:"`` for an in-memory database.
+        """
         self._conn = sqlite3.connect(db_path)
         self._conn.row_factory = sqlite3.Row
 

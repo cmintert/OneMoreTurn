@@ -67,6 +67,20 @@ class TurnManager:
         registry: ComponentRegistry,
         systems: list[System] | None = None,
     ) -> None:
+        """Initialise TurnManager from an already-loaded world snapshot.
+
+        The manager is intentionally stateless across CLI invocations: the
+        CLI reconstructs it from the database on every command.  All mutable
+        turn state (orders, current world) lives here for the duration of a
+        single resolve call, then is flushed to the DB.
+
+        Args:
+            world: Deserialized game world for the current turn.
+            game_id: Unique game identifier (used for DB queries and RNG seeding).
+            db: Open database connection for loading/saving snapshots and orders.
+            registry: Component registry for serialization round-trips.
+            systems: Additional game systems to register alongside ActionSystem.
+        """
         from engine.ecs import World
 
         self._world: World = world
@@ -81,10 +95,12 @@ class TurnManager:
 
     @property
     def state(self) -> TurnState:
+        """Whether the turn is currently accepting orders or mid-resolution."""
         return self._state
 
     @property
     def current_turn(self) -> int:
+        """Turn number of the world snapshot this manager was built from."""
         return self._world.current_turn
 
     # -- Order management --

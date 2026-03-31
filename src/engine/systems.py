@@ -56,6 +56,11 @@ class CycleDetectedError(Exception):
     """Raised when system dependencies form a cycle."""
 
     def __init__(self, cycle: list[str]) -> None:
+        """Capture the cycle members for diagnostic output.
+
+        Args:
+            cycle: Ordered list of system names forming the cycle.
+        """
         self.cycle = cycle
         super().__init__(f"Cycle detected: {' -> '.join(cycle)}")
 
@@ -64,6 +69,12 @@ class MissingEntitiesError(Exception):
     """Raised when a non-skippable system has no matching entities."""
 
     def __init__(self, system_name: str, required: list[str]) -> None:
+        """Capture which system failed and what it needed.
+
+        Args:
+            system_name: Name of the system that could not find matching entities.
+            required: Component names the system declared in required_components().
+        """
         self.system_name = system_name
         self.required = required
         super().__init__(
@@ -146,6 +157,18 @@ class SystemExecutor:
         game_id: str | uuid.UUID,
         turn_number: int = 0,
     ) -> None:
+        """Initialise the executor bound to a world and game context.
+
+        game_id and turn_number are forwarded to SystemRNG so every system
+        gets a deterministic seed derived from (game_id, turn_number,
+        system_name).  The sorted execution order is cached after first
+        computation and invalidated whenever a new system is registered.
+
+        Args:
+            world: The game world systems will operate on.
+            game_id: Unique game identifier used for RNG seeding.
+            turn_number: Current turn number used for RNG seeding.
+        """
         self._world = world
         self._game_id = game_id
         self._turn_number = turn_number
@@ -154,6 +177,7 @@ class SystemExecutor:
 
     @property
     def turn_number(self) -> int:
+        """Current turn; updated by TurnManager before each execute_all() call."""
         return self._turn_number
 
     @turn_number.setter

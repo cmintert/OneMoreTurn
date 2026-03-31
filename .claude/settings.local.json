@@ -1,4 +1,20 @@
 {
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "agent",
+            "if": "Bash(git commit*)",
+            "prompt": "A git commit was just made. Run `git show HEAD --stat` to see what files changed. Then read CLAUDE.md. If the commit introduces new CLI commands, new source modules or layers, architectural changes, or changes to design invariants — update CLAUDE.md to reflect those changes. Skip updating for bug fixes, test additions that don't add new modules, documentation-only changes, or refactors that don't change the architecture. Only edit CLAUDE.md if it is genuinely out of date.",
+            "statusMessage": "Checking if CLAUDE.md needs updating...",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Bash(npx markdownlint-cli2:*)",
@@ -32,7 +48,10 @@
       "Bash(python -m pytest tests/ --tb=short -q)",
       "Bash(python -m pytest --co -q)",
       "Bash(wc -l /c/Users/chris/VSCodeProjects/OneMoreTurn/OneMoreTurn/src/engine/*.py /c/Users/chris/VSCodeProjects/OneMoreTurn/OneMoreTurn/src/persistence/*.py /c/Users/chris/VSCodeProjects/OneMoreTurn/OneMoreTurn/src/cli/*.py)",
-      "Bash(find src/game -type f -name *.py)"
+      "Bash(find src/game -type f -name *.py)",
+      "Bash(find c:UserschrisVSCodeProjectsOneMoreTurnOneMoreTurn -name .github -o -name .gitlab-ci.yml -o -name Jenkinsfile -o -name .travis.yml -o -name *.yml -o -name *.yaml)",
+      "Bash(wc -l \"c:\\\\Users\\\\chris\\\\VSCodeProjects\\\\OneMoreTurn\\\\OneMoreTurn/src/engine\"/*.py \"c:\\\\Users\\\\chris\\\\VSCodeProjects\\\\OneMoreTurn\\\\OneMoreTurn/src/game\"/*.py \"c:\\\\Users\\\\chris\\\\VSCodeProjects\\\\OneMoreTurn\\\\OneMoreTurn/src/persistence\"/*.py \"c:\\\\Users\\\\chris\\\\VSCodeProjects\\\\OneMoreTurn\\\\OneMoreTurn/src/cli\"/*.py)",
+      "Bash(wc -l \"c:/Users/chris/VSCodeProjects/OneMoreTurn/OneMoreTurn/src/engine\"/*.py \"c:/Users/chris/VSCodeProjects/OneMoreTurn/OneMoreTurn/src/game\"/*.py \"c:/Users/chris/VSCodeProjects/OneMoreTurn/OneMoreTurn/src/persistence\"/*.py \"c:/Users/chris/VSCodeProjects/OneMoreTurn/OneMoreTurn/src/cli\"/*.py)"
     ]
   }
 }

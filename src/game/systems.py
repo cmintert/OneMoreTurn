@@ -25,25 +25,47 @@ if TYPE_CHECKING:
 
 
 class ProductionSystem(System):
-    """Planets produce resources based on population each turn."""
+    """Generates resources and grows population on all colonized planets each turn.
+
+    Runs in the MAIN phase after ActionSystem so that any player actions
+    which alter planet state (e.g. harvesting) are already resolved before
+    production is calculated.
+    """
 
     @classmethod
     def system_name(cls) -> str:
+        """Identifier used in logging, RNG seeding, and dependency graphs."""
         return "Production"
 
     @classmethod
     def phase(cls) -> str:
+        """MAIN phase: runs after PRE_TURN setup and alongside other core systems."""
         return "MAIN"
 
     @classmethod
     def required_components(cls) -> list:
+        """Entities must have all three components to receive production."""
         return [PopulationStats, Resources, Owner]
 
     @classmethod
     def required_prior_systems(cls) -> list:
+        """Run after ActionSystem so harvesting and building orders are resolved first."""
         return [ActionSystem]
 
     def update(self, world: World, rng: SystemRNG) -> None:
+        """Calculate and apply per-planet resource production and population growth.
+
+        For each planet with population, computes a production value scaled by
+        population size and morale, splits it into minerals/energy/food, and
+        clamps each to the resource capacity.  Also increments population by at
+        least 1 per turn.  Publishes a ``ProductionCompleted`` event visible only
+        to the planet's owner.
+
+        Args:
+            world: The current game world.
+            rng: Seeded RNG for this system and turn (not used; reserved for
+                future random events).
+        """
         for entity, pop, resources, owner in world.query(
             PopulationStats, Resources, Owner
         ):
@@ -82,25 +104,49 @@ class ProductionSystem(System):
 
 
 class MovementSystem(System):
-    """Advances fleets toward their destinations each turn."""
+    """Advances in-transit fleets toward their destinations each turn.
+
+    Runs in MAIN phase after ActionSystem so that newly issued MoveFleet
+    orders are already applied to FleetStats before movement is computed.
+    Each turn the fleet moves up to fleet.speed units; when turns_remaining
+    reaches 1 the fleet snaps exactly to its destination and transfers its
+    ChildComponent to the new star system.
+    """
 
     @classmethod
     def system_name(cls) -> str:
+        """Identifier used in logging, RNG seeding, and dependency graphs."""
         return "Movement"
 
     @classmethod
     def phase(cls) -> str:
+        """MAIN phase: runs alongside other core systems after action resolution."""
         return "MAIN"
 
     @classmethod
     def required_components(cls) -> list:
+        """Entities must have both FleetStats and Position to be moved."""
         return [FleetStats, Position]
 
     @classmethod
     def required_prior_systems(cls) -> list:
+        """Run after ActionSystem so new MoveFleet orders are accounted for."""
         return [ActionSystem]
 
     def update(self, world: World, rng: SystemRNG) -> None:
+        """Move each in-transit fleet one step closer to its destination.
+
+        Fleets with no destination (destination_x is None) are skipped.  When
+        turns_remaining > 1 the fleet moves proportionally along the vector;
+        on the final turn it snaps to the exact destination coordinates and
+        updates its ChildComponent to the new parent system.  Publishes a
+        ``FleetArrived`` event on completion.
+
+        Args:
+            world: The current game world.
+            rng: Seeded RNG for this system and turn (unused; reserved for
+                future combat or navigation hazard events).
+        """
         for entity, fleet, pos in world.query(FleetStats, Position):
             if fleet.destination_x is None:
                 continue
@@ -150,23 +196,47 @@ class MovementSystem(System):
 
 
 class VisibilitySystem(System):
-    """Updates fog of war based on fleet and planet positions."""
+    """Recomputes fog-of-war for every entity after all MAIN-phase systems finish.
 
+    Runs in POST_TURN so that movement and colonization outcomes are already
+    committed before visibility is recalculated.  Any entity within
+    OBSERVATION_RANGE of an owned entity becomes visible_to that player;
+    entities that were ever visible are accumulated in revealed_to so that
+    the map is never 'un-seen'.
+    """
+
+    # Maximum distance (in coordinate units) at which an entity can observe
+    # another.  Kept as a class attribute so subclasses or tests can override it.
     OBSERVATION_RANGE = 10.0
 
     @classmethod
     def system_name(cls) -> str:
+        """Identifier used in logging, RNG seeding, and dependency graphs."""
         return "Visibility"
 
     @classmethod
     def phase(cls) -> str:
+        """POST_TURN: runs after all MAIN systems so movement outcomes are committed."""
         return "POST_TURN"
 
     @classmethod
     def required_components(cls) -> list:
+        """All entities with a VisibilityComponent are evaluated each turn."""
         return [VisibilityComponent]
 
     def update(self, world: World, rng: SystemRNG) -> None:
+        """Rebuild visible_to and accumulate revealed_to for every visible entity.
+
+        First builds a lookup of {player_id: [(x, y), ...]} from all owned
+        positioned entities.  Then for each entity with a VisibilityComponent,
+        clears this turn's visible_to set and re-evaluates which players can see
+        it based on distance to any of their assets.  Owned entities are always
+        visible to their owner.
+
+        Args:
+            world: The current game world.
+            rng: Seeded RNG for this system and turn (unused).
+        """
         observer_positions: dict[uuid.UUID, list[tuple[float, float]]] = {}
 
         for entity, owner, pos in world.query(Owner, Position):

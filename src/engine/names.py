@@ -25,17 +25,28 @@ class NameComponent(Component):
 
     @classmethod
     def component_name(cls) -> str:
+        """Registry key used by serialization to identify this component type."""
         return "Name"
 
     @classmethod
     def version(cls) -> str:
+        """Schema version; increment when field names or types change."""
         return "1.0.0"
 
     @classmethod
     def constraints(cls) -> dict:
+        """Require a non-empty name string; enforced structurally by validate()."""
         return {"name": {"min_length": 1}}
 
     def validate(self) -> list[str]:
+        """Reject blank or whitespace-only names.
+
+        The base class constraint loop does not handle string length, so this
+        override adds the specific check needed for NameComponent.
+
+        Returns:
+            list[str]: Validation error messages; empty if the name is valid.
+        """
         errors = []
         if not self.name or not self.name.strip():
             errors.append("Name.name: must be non-empty")
@@ -55,6 +66,15 @@ class NameResolver:
     """
 
     def __init__(self, world: World) -> None:
+        """Bind the resolver to a specific world instance.
+
+        The resolver queries the world on every call rather than caching,
+        so it always reflects the current entity state without needing
+        explicit cache invalidation.
+
+        Args:
+            world: The game world to resolve names against.
+        """
         self._world = world
 
     def resolve(self, name: str) -> uuid.UUID:

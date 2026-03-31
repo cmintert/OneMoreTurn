@@ -19,16 +19,26 @@ class Entity:
     """An entity is a UUID with a bag of components."""
 
     def __init__(self, entity_id: uuid.UUID | None = None) -> None:
+        """Initialise the entity with an optional pre-supplied UUID.
+
+        Accepting an external UUID lets the persistence layer round-trip
+        entities through serialization without changing their identity.
+
+        Args:
+            entity_id: Explicit UUID to use; auto-generated if None.
+        """
         self._id = entity_id or uuid.uuid4()
         self._components: dict[type[Component], Component] = {}
         self._alive = True
 
     @property
     def id(self) -> uuid.UUID:
+        """Immutable unique identifier for this entity."""
         return self._id
 
     @property
     def alive(self) -> bool:
+        """False once destroy() or World.destroy_entity() has been called."""
         return self._alive
 
     def has(self, *component_types: type[Component]) -> bool:
@@ -50,9 +60,22 @@ class Entity:
     # -- Internal methods used by World --
 
     def _add_component(self, component: Component) -> None:
+        """Insert a component directly into the local dict without any validation.
+
+        Only World should call this; it performs all validation before
+        delegating here to keep mutation logic DRY.
+        """
         self._components[type(component)] = component
 
     def _remove_component(self, component_type: type[Component]) -> Component:
+        """Pop and return a component from the local dict without validation.
+
+        Only World should call this; callers are responsible for running
+        on_remove_validation and on_removed hooks first.
+
+        Returns:
+            Component: The removed component instance.
+        """
         return self._components.pop(component_type)
 
 
@@ -65,6 +88,15 @@ class SchemaError(Exception):
     """Raised when a component schema constraint is violated."""
 
     def __init__(self, errors: list[str]) -> None:
+        """Wrap one or more validation error messages.
+
+        Stores the raw list on self.errors so callers can inspect individual
+        messages programmatically, while also composing them into the
+        exception's string representation.
+
+        Args:
+            errors: Non-empty list of human-readable validation error messages.
+        """
         self.errors = errors
         super().__init__("; ".join(errors))
 
@@ -73,6 +105,14 @@ class World:
     """Central registry. All entity/component mutations go through World."""
 
     def __init__(self, event_bus: EventBus | None = None) -> None:
+        """Initialise an empty world.
+
+        Accepting an optional EventBus lets tests inject a pre-configured bus
+        (e.g. with subscribers already registered) without patching globals.
+
+        Args:
+            event_bus: EventBus to use; a fresh one is created if not supplied.
+        """
         self._entities: dict[uuid.UUID, Entity] = {}
         self._event_bus = event_bus or EventBus()
         self._component_index: dict[type[Component], set[uuid.UUID]] = {}
@@ -80,6 +120,7 @@ class World:
 
     @property
     def event_bus(self) -> EventBus:
+        """The event bus shared by all systems and actions within this world."""
         return self._event_bus
 
     # -- Entity lifecycle --
@@ -314,10 +355,12 @@ class World:
     # -- Internal index management --
 
     def _index_add(self, comp_type: type[Component], entity_id: uuid.UUID) -> None:
+        """Add an entity to the component index for fast query intersection."""
         if comp_type not in self._component_index:
             self._component_index[comp_type] = set()
         self._component_index[comp_type].add(entity_id)
 
     def _index_remove(self, comp_type: type[Component], entity_id: uuid.UUID) -> None:
+        """Remove an entity from the component index."""
         if comp_type in self._component_index:
             self._component_index[comp_type].discard(entity_id)

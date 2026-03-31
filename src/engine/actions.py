@@ -32,6 +32,7 @@ class ValidationResult:
     warnings: list[str] = field(default_factory=list)
 
     def __bool__(self) -> bool:
+        """True when valid is True, enabling ``if result:`` idiom."""
         return self.valid
 
 
@@ -118,19 +119,27 @@ class ActionSystem(System):
     """
 
     def __init__(self) -> None:
+        """Create an ActionSystem with empty action and result lists.
+
+        set_actions() must be called before execute_all() each turn so the
+        system knows which orders to process.
+        """
         self._actions: list[Action] = []
         self._results: list[ActionResult] = []
 
     @classmethod
     def system_name(cls) -> str:
+        """Identifier used by other systems in required_prior_systems declarations."""
         return "ActionSystem"
 
     @classmethod
     def phase(cls) -> str:
+        """MAIN phase: action resolution is the first significant work each turn."""
         return "MAIN"
 
     @classmethod
     def skip_if_missing(cls) -> bool:
+        """Always run even when no entities match, so empty-order turns are safe."""
         return True
 
     def set_actions(self, actions: list[Action]) -> None:
