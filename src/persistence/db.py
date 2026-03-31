@@ -76,6 +76,14 @@ class GameDatabase:
                 submitted_at REAL NOT NULL,
                 PRIMARY KEY (order_id, game_id, turn_number)
             );
+
+            CREATE TABLE IF NOT EXISTS events (
+                game_id     TEXT NOT NULL,
+                turn_number INTEGER NOT NULL,
+                event_index INTEGER NOT NULL,
+                event_json  TEXT NOT NULL,
+                PRIMARY KEY (game_id, turn_number, event_index)
+            );
             """
         )
 
@@ -280,3 +288,76 @@ class GameDatabase:
             for row in rows
         ]
         return actions
+
+    def latest_turn(self, game_id: str) -> int:
+        """Return the highest turn_number persisted for a game, or 0 if none."""
+        row = self._conn.execute(
+            "SELECT MAX(turn_number) AS max_turn FROM turns WHERE game_id = ?",
+            (game_id,),
+        ).fetchone()
+        if row is None or row["max_turn"] is None:
+            return 0
+        return int(row["max_turn"])
+
+    # -- Event persistence (full round-trip) --
+
+    def save_events(
+        self,
+        game_id: str,
+        turn_number: int,
+        events: list[Event],
+    ) -> None:
+        """Persist a list of Events as JSON for a turn."""
+        rows = []
+        for idx, event in enumerate(events):
+            record = {
+                "who": str(event.who) if event.who is not None else None,
+                "what": event.what,
+                "when": event.when,
+                "why": event.why,
+                "effects": event.effects,
+                "visibility_scope": (
+                    [str(s) for s in event.visibility_scope]
+                    if event.visibility_scope is not None
+                    else None
+                ),
+                "timestamp": event.timestamp,
+            }
+            rows.append((game_id, turn_number, idx, json.dumps(record, sort_keys=True)))
+        with self._conn:
+            self._conn.executemany(
+                """
+                INSERT OR REPLACE INTO events
+                    (game_id, turn_number, event_index, event_json)
+                VALUES (?, ?, ?, ?)
+                """,
+                rows,
+            )
+
+    def load_events(
+        self,
+        game_id: str,
+        turn_number: int,
+    ) -> list[Event]:
+        """Load all Events for a turn, ordered by event_index."""
+        rows = self._conn.execute(
+            """
+            SELECT event_json FROM events
+            WHERE game_id = ? AND turn_number = ?
+            ORDER BY event_index
+            """,
+            (game_id, turn_number),
+        ).fetchall()
+        events: list[Event] = []
+        for row in rows:
+            record = json.loads(row["event_json"])
+            events.append(Event(
+                who=record["who"],
+                what=record["what"],
+                when=record["when"],
+                why=record["why"],
+                effects=record["effects"],
+                visibility_scope=record.get("visibility_scope"),
+                timestamp=record["timestamp"],
+            ))
+        return events

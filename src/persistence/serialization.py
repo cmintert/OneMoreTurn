@@ -45,7 +45,7 @@ def _serialize_value(value: Any) -> Any:
         return str(value)
     if isinstance(value, type) and hasattr(value, "component_name"):
         return value.component_name()
-    if isinstance(value, list):
+    if isinstance(value, (list, set)):
         return [_serialize_value(item) for item in value]
     return value
 
@@ -91,19 +91,20 @@ def _deserialize_value(value: Any, type_hint: Any, registry: ComponentRegistry) 
     origin = typing.get_origin(type_hint)
     args = typing.get_args(type_hint)
 
-    if origin is list and args:
+    if origin in (list, set) and args:
         item_hint = args[0]
         item_origin = typing.get_origin(item_hint)
         item_args = typing.get_args(item_hint)
 
         if item_hint is uuid.UUID:
-            return [uuid.UUID(str(item)) for item in value]
+            items = [uuid.UUID(str(item)) for item in value]
+            return set(items) if origin is set else items
 
         # list[type[Component]] → list of class objects from registry
         if item_origin is type and item_args:
             return [registry.get(item) for item in value]
 
-        return list(value)
+        return set(value) if origin is set else list(value)
 
     return value
 
@@ -251,12 +252,10 @@ def serialize_action(action: Any) -> dict[str, Any]:
     Returns a dict with action_type, player_id, order_id, and a data dict
     of all remaining dataclass fields.
     """
-    import dataclasses as _dc
-
     cls = type(action)
     data = {}
-    if _dc.is_dataclass(action):
-        for f in _dc.fields(action):
+    if dataclasses.is_dataclass(action):
+        for f in dataclasses.fields(action):
             value = getattr(action, f.name)
             data[f.name] = _serialize_value(value)
 
@@ -270,12 +269,10 @@ def serialize_action(action: Any) -> dict[str, Any]:
 
 def deserialize_action(record: dict[str, Any], registry: ActionRegistry) -> Any:
     """Reconstruct an Action from its serialized dict record."""
-    import dataclasses as _dc
-
     cls = registry.get(record["action_type"])
     data = dict(record.get("data", {}))
 
-    if _dc.is_dataclass(cls):
+    if dataclasses.is_dataclass(cls):
         hints = _get_type_hints_safe(cls)
         component_registry = ComponentRegistry()
         for field_name in list(data):

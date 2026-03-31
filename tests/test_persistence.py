@@ -17,8 +17,8 @@ from persistence.serialization import ComponentRegistry
 from tests.conftest import (
     ComponentBuilder,
     HealthComponent,
-    OwnerComponent,
-    PositionComponent,
+    StubOwnerComponent,
+    StubPositionComponent,
     PoisonComponent,
 )
 
@@ -41,8 +41,8 @@ def registry() -> ComponentRegistry:
     reg.register(
         HealthComponent,
         PoisonComponent,
-        PositionComponent,
-        OwnerComponent,
+        StubPositionComponent,
+        StubOwnerComponent,
         ContainerComponent,
         ChildComponent,
     )
@@ -60,13 +60,13 @@ def _build_world_10_entities() -> World:
 
     # Entities with UUID fields
     for _ in range(2):
-        world.create_entity([OwnerComponent(owner_id=uuid.uuid4())])
+        world.create_entity([StubOwnerComponent(owner_id=uuid.uuid4())])
 
     # Entities with multiple components
     for i in range(2):
         world.create_entity([
             HealthComponent(current=50 + i, maximum=100),
-            PositionComponent(x=i, y=i * 2),
+            StubPositionComponent(x=i, y=i * 2),
         ])
 
     # A parent–child pair
@@ -138,10 +138,10 @@ class TestSnapshotRoundTrip:
     def test_uuid_field_survives(self, db: GameDatabase, registry: ComponentRegistry):
         owner_id = uuid.uuid4()
         world = World()
-        world.create_entity([OwnerComponent(owner_id=owner_id)])
+        world.create_entity([StubOwnerComponent(owner_id=owner_id)])
         db.save_snapshot("game1", 1, world, registry)
         restored = db.load_snapshot("game1", 1, registry)
-        comp = restored.entities()[0].get(OwnerComponent)
+        comp = restored.entities()[0].get(StubOwnerComponent)
         assert comp.owner_id == owner_id
 
     def test_current_turn_survives(self, db: GameDatabase, registry: ComponentRegistry):
@@ -183,13 +183,13 @@ class TestSnapshotRoundTrip:
         self, db: GameDatabase, registry: ComponentRegistry
     ):
         world = World()
-        e = world.create_entity([HealthComponent(), PositionComponent(x=1, y=2)])
+        e = world.create_entity([HealthComponent(), StubPositionComponent(x=1, y=2)])
         db.save_snapshot("game1", 1, world, registry)
         rows = db._conn.execute(
             "SELECT * FROM entity_components WHERE entity_id = ?", (str(e.id),)
         ).fetchall()
         types = {row["component_type"] for row in rows}
-        assert types == {"Health", "Position"}
+        assert types == {"Health", "StubPosition"}
 
     def test_multiple_turns_stored_independently(
         self, db: GameDatabase, registry: ComponentRegistry
@@ -358,3 +358,64 @@ class TestDatabaseIsolation:
 
         with pytest.raises(KeyError):
             db2.load_snapshot("game", 1, registry)
+
+
+# ---------------------------------------------------------------------------
+# Event round-trip persistence (events table)
+# ---------------------------------------------------------------------------
+
+
+class TestEventRoundTrip:
+    def test_save_and_load_events(self, db: GameDatabase):
+        events = [
+            Event(
+                who=str(uuid.uuid4()),
+                what="FleetArrived",
+                when=1,
+                why="movement",
+                effects={"system": "Alpha"},
+                visibility_scope=[str(uuid.uuid4())],
+                timestamp=100.0,
+            ),
+            Event(
+                who="system",
+                what="ProductionCompleted",
+                when=1,
+                why="production",
+                effects={"minerals": 5.0},
+                timestamp=101.0,
+            ),
+        ]
+        db.save_events("game1", 1, events)
+        loaded = db.load_events("game1", 1)
+        assert len(loaded) == 2
+        assert loaded[0].what == "FleetArrived"
+        assert loaded[0].effects == {"system": "Alpha"}
+        assert loaded[0].visibility_scope is not None
+        assert len(loaded[0].visibility_scope) == 1
+        assert loaded[1].what == "ProductionCompleted"
+        assert loaded[1].visibility_scope is None
+
+    def test_load_events_empty(self, db: GameDatabase):
+        assert db.load_events("game1", 99) == []
+
+    def test_events_isolated_by_game_and_turn(self, db: GameDatabase):
+        ev = [Event(who="sys", what="E", when=1, why="test", effects={})]
+        db.save_events("game1", 1, ev)
+        db.save_events("game1", 2, ev)
+        db.save_events("game2", 1, ev)
+        assert len(db.load_events("game1", 1)) == 1
+        assert len(db.load_events("game1", 2)) == 1
+        assert len(db.load_events("game2", 1)) == 1
+        assert len(db.load_events("game2", 2)) == 0
+
+    def test_preserves_who_what_when_why(self, db: GameDatabase):
+        uid = str(uuid.uuid4())
+        ev = Event(who=uid, what="Test", when=5, why="reason", effects={"a": 1})
+        db.save_events("game1", 1, [ev])
+        loaded = db.load_events("game1", 1)
+        assert loaded[0].who == uid
+        assert loaded[0].what == "Test"
+        assert loaded[0].when == 5
+        assert loaded[0].why == "reason"
+        assert loaded[0].effects == {"a": 1}

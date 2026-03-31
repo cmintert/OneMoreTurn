@@ -10,7 +10,7 @@ from engine.ecs import Entity
 from tests.conftest import (
     ComponentBuilder,
     HealthComponent,
-    PositionComponent,
+    StubPositionComponent,
 )
 
 
@@ -43,12 +43,12 @@ class TestComponentBag:
         e = Entity()
         e._add_component(ComponentBuilder.health())
         e._add_component(ComponentBuilder.position())
-        assert e.has(HealthComponent, PositionComponent)
+        assert e.has(HealthComponent, StubPositionComponent)
 
     def test_has_multiple_partial(self):
         e = Entity()
         e._add_component(ComponentBuilder.health())
-        assert e.has(HealthComponent, PositionComponent) is False
+        assert e.has(HealthComponent, StubPositionComponent) is False
 
     def test_get_component(self):
         e = Entity()
@@ -67,7 +67,7 @@ class TestComponentBag:
         e._add_component(ComponentBuilder.health())
         view = e.components()
         with pytest.raises(TypeError):
-            view[PositionComponent] = ComponentBuilder.position()  # type: ignore[index]
+            view[StubPositionComponent] = ComponentBuilder.position()  # type: ignore[index]
 
 
 class TestLifecycle:

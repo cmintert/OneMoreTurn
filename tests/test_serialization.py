@@ -21,9 +21,9 @@ from persistence.serialization import (
 from tests.conftest import (
     ComponentBuilder,
     HealthComponent,
-    OwnerComponent,
+    StubOwnerComponent,
     PoisonComponent,
-    PositionComponent,
+    StubPositionComponent,
 )
 
 
@@ -42,8 +42,8 @@ def standard_registry() -> ComponentRegistry:
     return make_registry(
         HealthComponent,
         PoisonComponent,
-        PositionComponent,
-        OwnerComponent,
+        StubPositionComponent,
+        StubOwnerComponent,
         ContainerComponent,
         ChildComponent,
     )
@@ -67,9 +67,9 @@ class TestComponentRegistry:
 
     def test_register_multiple(self):
         reg = ComponentRegistry()
-        reg.register(HealthComponent, PositionComponent)
+        reg.register(HealthComponent, StubPositionComponent)
         assert reg.get("Health") is HealthComponent
-        assert reg.get("Position") is PositionComponent
+        assert reg.get("StubPosition") is StubPositionComponent
 
     def test_all_returns_copy(self):
         reg = ComponentRegistry()
@@ -94,7 +94,7 @@ class TestSerializeComponent:
 
     def test_uuid_field_serialized_as_string(self):
         owner_id = uuid.uuid4()
-        comp = OwnerComponent(owner_id=owner_id)
+        comp = StubOwnerComponent(owner_id=owner_id)
         record = serialize_component(comp)
         assert record["data"]["owner_id"] == str(owner_id)
         assert isinstance(record["data"]["owner_id"], str)
@@ -117,7 +117,7 @@ class TestSerializeComponent:
         assert record["data"]["parent_id"] == str(parent_id)
 
     def test_result_is_json_serializable(self):
-        comp = OwnerComponent(owner_id=uuid.uuid4())
+        comp = StubOwnerComponent(owner_id=uuid.uuid4())
         record = serialize_component(comp)
         # Must not raise
         json.dumps(record)
@@ -142,15 +142,15 @@ class TestDeserializeComponent:
         assert comp.maximum == 100
 
     def test_uuid_field_reconstructed(self):
-        reg = make_registry(OwnerComponent)
+        reg = make_registry(StubOwnerComponent)
         owner_id = uuid.uuid4()
         record = {
-            "component_type": "Owner",
+            "component_type": "StubOwner",
             "component_version": "1.0.0",
             "data": {"owner_id": str(owner_id)},
         }
         comp = deserialize_component(record, reg)
-        assert isinstance(comp, OwnerComponent)
+        assert isinstance(comp, StubOwnerComponent)
         assert comp.owner_id == owner_id
         assert isinstance(comp.owner_id, uuid.UUID)
 
@@ -209,7 +209,7 @@ class TestWorldRoundTrip:
     def test_entity_count_preserved(self):
         world = World()
         world.create_entity([HealthComponent()])
-        world.create_entity([PositionComponent(x=3, y=7)])
+        world.create_entity([StubPositionComponent(x=3, y=7)])
         reg = standard_registry()
         snapshot = serialize_world(world, game_id="g1")
         restored = deserialize_world(snapshot, reg)
@@ -218,7 +218,7 @@ class TestWorldRoundTrip:
     def test_entity_ids_preserved(self):
         world = World()
         e1 = world.create_entity([HealthComponent()])
-        e2 = world.create_entity([PositionComponent()])
+        e2 = world.create_entity([StubPositionComponent()])
         reg = standard_registry()
         snapshot = serialize_world(world, game_id="g1")
         restored = deserialize_world(snapshot, reg)
@@ -240,12 +240,12 @@ class TestWorldRoundTrip:
     def test_uuid_field_preserved(self):
         world = World()
         owner_id = uuid.uuid4()
-        world.create_entity([OwnerComponent(owner_id=owner_id)])
+        world.create_entity([StubOwnerComponent(owner_id=owner_id)])
         reg = standard_registry()
         snapshot = serialize_world(world, game_id="g1")
         restored = deserialize_world(snapshot, reg)
         entity = restored.entities()[0]
-        comp = entity.get(OwnerComponent)
+        comp = entity.get(StubOwnerComponent)
         assert comp.owner_id == owner_id
         assert isinstance(comp.owner_id, uuid.UUID)
 
@@ -292,13 +292,13 @@ class TestWorldRoundTrip:
 
     def test_world_query_works_after_restore(self):
         world = World()
-        world.create_entity([HealthComponent(), PositionComponent(x=1, y=2)])
+        world.create_entity([HealthComponent(), StubPositionComponent(x=1, y=2)])
         world.create_entity([HealthComponent(current=50)])
         reg = standard_registry()
         snapshot = serialize_world(world, game_id="g1")
         restored = deserialize_world(snapshot, reg)
 
-        results = restored.query(HealthComponent, PositionComponent)
+        results = restored.query(HealthComponent, StubPositionComponent)
         assert len(results) == 1
         _, health, pos = results[0]
         assert pos.x == 1
@@ -324,8 +324,8 @@ class TestWorldRoundTrip:
         """Same world serialized twice produces identical JSON."""
         world = World()
         owner_id = uuid.uuid4()
-        world.create_entity([HealthComponent(current=80), OwnerComponent(owner_id=owner_id)])
-        world.create_entity([PositionComponent(x=3, y=4)])
+        world.create_entity([HealthComponent(current=80), StubOwnerComponent(owner_id=owner_id)])
+        world.create_entity([StubPositionComponent(x=3, y=4)])
 
         reg = standard_registry()
         snap1 = json.dumps(serialize_world(world, game_id="g1"), sort_keys=True)

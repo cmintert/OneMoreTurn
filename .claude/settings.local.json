@@ -29,7 +29,10 @@
       "Bash(python -m pytest --tb=short -q)",
       "Bash(python -m pytest tests/test_persistence.py -v --tb=short)",
       "Bash(python -m pytest tests/test_actions.py tests/test_turn.py -v --tb=short)",
-      "Bash(python -m pytest tests/ --tb=short -q)"
+      "Bash(python -m pytest tests/ --tb=short -q)",
+      "Bash(python -m pytest --co -q)",
+      "Bash(wc -l /c/Users/chris/VSCodeProjects/OneMoreTurn/OneMoreTurn/src/engine/*.py /c/Users/chris/VSCodeProjects/OneMoreTurn/OneMoreTurn/src/persistence/*.py /c/Users/chris/VSCodeProjects/OneMoreTurn/OneMoreTurn/src/cli/*.py)",
+      "Bash(find src/game -type f -name *.py)"
     ]
   }
 }

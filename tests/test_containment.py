@@ -8,7 +8,7 @@ import pytest
 
 from engine.components import ChildComponent, ContainerComponent
 from engine.ecs import SchemaError, World
-from tests.conftest import ComponentBuilder, HealthComponent, PositionComponent
+from tests.conftest import ComponentBuilder, HealthComponent, StubPositionComponent
 
 
 @pytest.fixture

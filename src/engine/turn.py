@@ -227,6 +227,9 @@ class TurnManager:
                     event,
                 )
 
+            # Persist full events for round-trip loading
+            self._db.save_events(self._game_id, turn_number, events)
+
             result = TurnResult(
                 turn_number=turn_number,
                 events=events,

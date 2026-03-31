@@ -14,7 +14,7 @@ from engine.systems import (
     SystemExecutor,
     topological_sort,
 )
-from tests.conftest import ComponentBuilder, HealthComponent, PositionComponent
+from tests.conftest import ComponentBuilder, HealthComponent, StubPositionComponent
 
 
 # ---------------------------------------------------------------------------

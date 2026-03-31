@@ -17,7 +17,7 @@ cli = ["typer>=0.9"]
 onemoreturn = "cli.main:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/engine", "src/persistence", "src/cli"]
+packages = ["src/engine", "src/persistence", "src/cli", "src/game"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

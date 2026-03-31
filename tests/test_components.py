@@ -10,9 +10,9 @@ from engine.components import Component
 from tests.conftest import (
     ComponentBuilder,
     HealthComponent,
-    OwnerComponent,
+    StubOwnerComponent,
     PoisonComponent,
-    PositionComponent,
+    StubPositionComponent,
 )
 
 
@@ -47,13 +47,13 @@ class TestSchemaProtocol:
         assert HealthComponent.version() == "1.0.0"
 
     def test_dependencies_default_empty(self):
-        assert PositionComponent.dependencies() == []
+        assert StubPositionComponent.dependencies() == []
 
     def test_dependencies_declared(self):
         assert PoisonComponent.dependencies() == [HealthComponent]
 
     def test_constraints_default_empty(self):
-        assert PositionComponent.constraints() == {}
+        assert StubPositionComponent.constraints() == {}
 
     def test_constraints_declared(self):
         c = HealthComponent.constraints()
@@ -61,7 +61,7 @@ class TestSchemaProtocol:
         assert c["current"]["min"] == 0
 
     def test_properties_schema_introspection(self):
-        schema = PositionComponent.properties_schema()
+        schema = StubPositionComponent.properties_schema()
         assert "x" in schema
         assert "y" in schema
 

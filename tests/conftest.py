@@ -52,13 +52,13 @@ class PoisonComponent(Component):
 
 
 @dataclass
-class PositionComponent(Component):
+class StubPositionComponent(Component):
     x: int = 0
     y: int = 0
 
     @classmethod
     def component_name(cls) -> str:
-        return "Position"
+        return "StubPosition"
 
     @classmethod
     def version(cls) -> str:
@@ -66,12 +66,12 @@ class PositionComponent(Component):
 
 
 @dataclass
-class OwnerComponent(Component):
+class StubOwnerComponent(Component):
     owner_id: uuid.UUID = field(default_factory=uuid.uuid4)
 
     @classmethod
     def component_name(cls) -> str:
-        return "Owner"
+        return "StubOwner"
 
     @classmethod
     def version(cls) -> str:
@@ -93,12 +93,12 @@ class ComponentBuilder:
         return PoisonComponent(damage_per_turn=damage_per_turn)
 
     @staticmethod
-    def position(x: int = 0, y: int = 0) -> PositionComponent:
-        return PositionComponent(x=x, y=y)
+    def position(x: int = 0, y: int = 0) -> StubPositionComponent:
+        return StubPositionComponent(x=x, y=y)
 
     @staticmethod
-    def owner(owner_id: uuid.UUID | None = None) -> OwnerComponent:
-        return OwnerComponent(owner_id=owner_id or uuid.uuid4())
+    def owner(owner_id: uuid.UUID | None = None) -> StubOwnerComponent:
+        return StubOwnerComponent(owner_id=owner_id or uuid.uuid4())
 
 
 # ---------------------------------------------------------------------------

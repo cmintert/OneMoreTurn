@@ -13,9 +13,9 @@ from engine.events import EventBus
 from tests.conftest import (
     ComponentBuilder,
     HealthComponent,
-    OwnerComponent,
+    StubOwnerComponent,
     PoisonComponent,
-    PositionComponent,
+    StubPositionComponent,
 )
 
 
@@ -40,7 +40,7 @@ class TestCreateEntity:
             ComponentBuilder.health(),
             ComponentBuilder.position(),
         ])
-        assert e.has(HealthComponent, PositionComponent)
+        assert e.has(HealthComponent, StubPositionComponent)
 
     def test_create_with_specific_id(self, world: World):
         eid = uuid.uuid4()
@@ -182,7 +182,7 @@ class TestRemoveComponent:
         ])
         world.remove_component(e.id, HealthComponent)
         assert world.query(HealthComponent) == []
-        assert len(world.query(PositionComponent)) == 1
+        assert len(world.query(StubPositionComponent)) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +203,7 @@ class TestQuery:
         world.create_entity([ComponentBuilder.health(), ComponentBuilder.position()])
         world.create_entity([ComponentBuilder.health()])
         world.create_entity([ComponentBuilder.position()])
-        results = world.query(HealthComponent, PositionComponent)
+        results = world.query(HealthComponent, StubPositionComponent)
         assert len(results) == 1
 
     def test_query_no_matches(self, world: World):
@@ -219,7 +219,7 @@ class TestQuery:
             ComponentBuilder.health(current=42),
             ComponentBuilder.position(x=10, y=20),
         ])
-        results = world.query(PositionComponent, HealthComponent)
+        results = world.query(StubPositionComponent, HealthComponent)
         entity, pos, health = results[0]
         assert pos.x == 10
         assert health.current == 42
@@ -281,10 +281,10 @@ def test_hypothesis_query_correctness(
         if has_h:
             components.append(HealthComponent(current=50, maximum=100))
         if has_p:
-            components.append(PositionComponent(x=i, y=i))
+            components.append(StubPositionComponent(x=i, y=i))
         if has_h and has_p:
             expected_both += 1
         world.create_entity(components)
 
-    results = world.query(HealthComponent, PositionComponent)
+    results = world.query(HealthComponent, StubPositionComponent)
     assert len(results) == expected_both
