@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 from engine.actions import Action, ValidationResult
 from engine.components import ChildComponent
+from engine.ecs import World
 from engine.events import Event
 from game.components import (
     FleetStats,
@@ -66,7 +67,7 @@ class MoveFleetAction(Action):
         """Unique identifier for this order; used for replacement and tracking."""
         return self._order_id
 
-    def validate(self, world) -> ValidationResult:
+    def validate(self, world: World) -> ValidationResult:
         """Check that the fleet exists, is owned by this player, and is not already moving.
 
         Also verifies that the target system exists and has a Position.
@@ -101,7 +102,7 @@ class MoveFleetAction(Action):
 
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
-    def execute(self, world) -> list[Event]:
+    def execute(self, world: World) -> list[Event]:
         """Set destination on FleetStats and detach fleet from its current system.
 
         Computes turns_remaining as ceil(distance / speed).  Removes the
@@ -180,7 +181,7 @@ class ColonizePlanetAction(Action):
         """Unique identifier for this order; used for replacement and tracking."""
         return self._order_id
 
-    def validate(self, world) -> ValidationResult:
+    def validate(self, world: World) -> ValidationResult:
         """Check that the fleet exists and is at the same system as the target planet.
 
         Also verifies that the planet is not already colonized.
@@ -212,7 +213,7 @@ class ColonizePlanetAction(Action):
 
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
-    def execute(self, world) -> list[Event]:
+    def execute(self, world: World) -> list[Event]:
         """Transfer ownership to the colonizing player and seed initial population.
 
         Adds Owner to the planet mirroring the fleet's owner, and adds a
@@ -298,7 +299,7 @@ class HarvestResourcesAction(Action):
         """Unique identifier for this order; used for replacement and tracking."""
         return self._order_id
 
-    def validate(self, world) -> ValidationResult:
+    def validate(self, world: World) -> ValidationResult:
         """Check ownership, co-location, available resources, and fleet capacity.
 
         Ensures the player owns both the fleet and the planet, both are in the
@@ -349,7 +350,7 @@ class HarvestResourcesAction(Action):
 
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
-    def execute(self, world) -> list[Event]:
+    def execute(self, world: World) -> list[Event]:
         """Move the requested amount from the planet's stockpile to the fleet.
 
         Directly adjusts the amounts dicts on both Resources components.
@@ -420,7 +421,7 @@ class StartResearchAction(Action):
         """Unique identifier for this order; used for replacement and tracking."""
         return self._order_id
 
-    def validate(self, world) -> ValidationResult:
+    def validate(self, world: World) -> ValidationResult:
         """Check entity exists, is owned, has ResearchComponent, tech is valid."""
         from game.systems import PROPULSION_TECHS
 
@@ -450,7 +451,7 @@ class StartResearchAction(Action):
 
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
-    def execute(self, world) -> list[Event]:
+    def execute(self, world: World) -> list[Event]:
         """Set active research on the civilization entity."""
         from game.systems import PROPULSION_TECHS
 

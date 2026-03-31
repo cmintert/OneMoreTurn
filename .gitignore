@@ -31,5 +31,8 @@ coverage.xml
 # Game data
 games/
 
+# Docs build output
+site/
+
 # Environment
 .env

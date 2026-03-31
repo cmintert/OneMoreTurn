@@ -29,6 +29,10 @@ markdownlint "**/*.md"
 
 # Check for god classes (too-many-public-methods, too-many-instance-attributes)
 .venv/Scripts/ruff check src/ tests/
+
+# Build API docs (install docs deps first: pip install -e ".[docs]")
+mkdocs serve          # live dev server at http://localhost:8000
+mkdocs build --strict # static site to site/
 ```
 
 The pytest configuration is in `pyproject.toml`: `testpaths = ["tests"]`, `pythonpath = ["src", "tests"]`.
