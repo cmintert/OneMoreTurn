@@ -299,5 +299,18 @@ def _comp_summary(comp) -> str:
     return str(comp)
 
 
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", help="Host to bind to."),
+    port: int = typer.Option(8000, help="Port to listen on."),
+    debug: bool = typer.Option(False, help="Enable Flask debug mode."),
+) -> None:
+    """Start the web UI server at http://<host>:<port>/"""
+    from cli.server import run_server  # deferred to keep Flask optional
+
+    typer.echo(f"Starting OneMoreTurn web UI at http://{host}:{port}/")
+    run_server(host=host, port=port, debug=debug)
+
+
 if __name__ == "__main__":
     app()

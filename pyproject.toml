@@ -13,6 +13,7 @@ dependencies = []
 test = ["pytest>=7.0", "hypothesis>=6.0"]
 cli = ["typer>=0.9"]
 lint = ["ruff>=0.4"]
+web = ["flask>=3.0"]
 
 [project.scripts]
 onemoreturn = "cli.main:app"
