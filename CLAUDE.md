@@ -45,6 +45,7 @@ OneMoreTurn is a PBEM (play-by-email) 4X game engine built on a pure ECS (Entity
 
 ```
 src/cli/          Typer CLI: create-game, submit-orders, resolve-turn, query-state, turn-summary
+                  names.py: NameResolver (player name → UUID bridge)
 src/game/         Game content: components, actions, systems, archetypes, setup, summary
 src/persistence/  SQLite layer: snapshots, orders, events, serialization, migrations
 src/engine/       ECS core: Entity, World, Component, System, Action, EventBus, TurnManager, RNG
@@ -53,13 +54,13 @@ src/engine/       ECS core: Entity, World, Component, System, Action, EventBus, 
 ### Engine core (`src/engine/`)
 
 - **`ecs.py`** — `Entity` (UUID-based), `World` (central registry), `SchemaError`
-- **`components.py`** — Abstract `Component` with schema protocol: `component_name()`, `version()`, `dependencies()`, `properties_schema()`, `constraints()`, plus validation hooks `validate()` / `on_add_validation()` / `on_remove_validation()`
+- **`components.py`** — Abstract `Component` with schema protocol: `component_name()`, `version()`, `dependencies()`, `properties_schema()`, `constraints()`, plus validation hooks `validate()` / `on_add_validation()` / `on_remove_validation()` / `on_deserialize()`
 - **`systems.py`** — Abstract `System` with phase ordering (PRE_TURN → MAIN → POST_TURN → CLEANUP) and topological sort via Kahn's algorithm using `required_prior_systems()`
 - **`actions.py`** — Abstract `Action` with `validate(world) -> ValidationResult` and `execute(world) -> list[Event]`; `ActionSystem` handles conflict resolution
 - **`events.py`** — `Event` (immutable, with `visibility_scope` for fog-of-war), `EventBus` (typed pub/sub)
-- **`turn.py`** — `TurnManager`: receive orders → validate → execute → run systems → save snapshot → emit events
+- **`turn.py`** — `TurnManager`: receive orders → validate → execute → run systems → return `TurnResult` (with resolved `World`). **No I/O** — the caller (CLI/server) is responsible for persisting the snapshot, orders, and events.
 - **`rng.py`** — `SystemRNG` seeded per `(game_id, turn_number, system_name)` — ensures determinism
-- **`names.py`** — `NameComponent` + `NameResolver` for player-facing names → UUID mapping
+- **`names.py`** — `NameComponent` for player-facing entity naming. `NameResolver` lives in `src/cli/names.py` (a CLI/UX concern, not engine core).
 
 ### Game content (`src/game/`)
 
@@ -76,7 +77,7 @@ src/engine/       ECS core: Entity, World, Component, System, Action, EventBus, 
   `create_fleet()`; all default values read from `ARCHETYPES`
 - **`setup.py`** — Procedural, seeded map generation; all positions and resource ranges
   read from `MAP`
-- **`registry.py`** — `game_component_registry()`, `game_action_registry()`, `game_systems()` — the wiring layer connecting persistence to game content
+- **`registry.py`** — `game_component_registry()`, `game_action_registry()`, `game_systems()` — the wiring layer. Registry factory functions use **lazy local imports** of `persistence.serialization` so that importing `game.registry` does not pull in the persistence layer at module load time.
 - **`summary.py`** — `generate_turn_summary()` filters entity state and events by per-player fog-of-war
 
 ### Persistence (`src/persistence/`)
@@ -84,16 +85,17 @@ src/engine/       ECS core: Entity, World, Component, System, Action, EventBus, 
 SQLite database with 5 tables: `entity_components`, `turns` (full snapshots), `orders`, `events`, `event_log`.
 
 - **`db.py`** — `GameDatabase`: `save_snapshot()`, `load_world()`, `save_order()`, `get_current_orders()`, `save_events()`, `load_events()`
-- **`serialization.py`** — `ComponentRegistry` / `ActionRegistry` (name → class mappings), `serialize_world()` / `deserialize_world()` (with schema validation)
+- **`serialization.py`** — `ComponentRegistry` / `ActionRegistry` (name → class mappings), `serialize_world()` / `deserialize_world()` (with schema validation). Calls `Component.on_deserialize()` during component reconstruction — no hardcoded type-name checks.
 - **`migrations.py`** — `MigrationRegistry`: idempotent, chained migrations applied on world load
 
 ### Key design invariants
 
 1. **No game logic in the engine.** The engine (`src/engine/`) must remain game-agnostic and extensible.
-2. **Determinism.** System execution order is topologically sorted; RNG is seeded per `(game_id, turn_number, system_name)`. Identical inputs always produce identical outputs.
-3. **Validation is layered.** Components validate at construction; actions validate at submission and again at resolution.
-4. **Conflict resolution via seeded RNG.** When competing orders conflict, exactly one succeeds; all others get failure feedback.
-5. **Fog of war is structural.** `VisibilityComponent.visible_to` / `revealed_to` are maintained by `VisibilitySystem` each turn; `generate_turn_summary()` filters output by these sets.
+2. **No persistence in the engine.** `TurnManager` is a pure computation step. The CLI/server layer calls the 4 persistence methods (`save_snapshot`, `save_orders`, `log_event`, `save_events`) after receiving the `TurnResult`.
+3. **Determinism.** System execution order is topologically sorted; RNG is seeded per `(game_id, turn_number, system_name)`. Identical inputs always produce identical outputs.
+4. **Validation is layered.** Components validate at construction; actions validate at submission and again at resolution.
+5. **Conflict resolution via seeded RNG.** When competing orders conflict, exactly one succeeds; all others get failure feedback.
+6. **Fog of war is structural.** `VisibilityComponent.visible_to` / `revealed_to` are maintained by `VisibilitySystem` each turn; `generate_turn_summary()` filters output by these sets.
 
 ## Class size limits
 
@@ -141,8 +143,10 @@ Pydantic model in `config.py`, then reference the singleton in game code.
 
 ## Development status
 
-Phases 1–7 are complete. Phase 7 introduced data-driven configuration — all game
+Phases 1–7 are complete, plus an engine-separation refactor. Phase 7 introduced data-driven configuration — all game
 balance values now live in `data/*.toml` and are validated by Pydantic at startup.
+The separation refactor removed all persistence coupling from `engine/` and all module-level
+persistence imports from `game/`.
 
 Design rationale and phase-by-phase documentation live in `DESIGN.md`, `DEV_PHASES.md`,
 and `PHASE_*_DOCU.md`.
