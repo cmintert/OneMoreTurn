@@ -4,75 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OneMoreTurn</title>
-  <link rel="stylesheet" href="/web/style.css" />
 </head>
 <body>
-  <div id="app">
-
-    <!-- ── Left sidebar ─────────────────────────────────────────────────── -->
-    <aside id="sidebar">
-      <h1>OneMoreTurn</h1>
-
-      <section id="new-game-panel">
-        <h2>New Game</h2>
-        <input id="ng-name"    type="text" placeholder="Game name" />
-        <input id="ng-player1" type="text" placeholder="Player 1" value="Player1" />
-        <input id="ng-player2" type="text" placeholder="Player 2" value="Player2" />
-        <button id="ng-create">Create Game</button>
-        <div id="ng-feedback" class="feedback"></div>
-      </section>
-
-      <section id="game-list-panel">
-        <h2>Games</h2>
-        <ul id="game-list"></ul>
-      </section>
-
-      <section id="player-panel" class="hidden">
-        <h2 id="player-name-label"></h2>
-        <div id="player-resources" class="resource-table"></div>
-        <div id="planet-list"></div>
-      </section>
-    </aside>
-
-    <!-- ── Galaxy map ────────────────────────────────────────────────────── -->
-    <main id="map-area">
-      <div id="map-header">
-        <span id="turn-label">Select a game</span>
-        <select id="player-select" class="hidden"></select>
-        <button id="resolve-btn" class="hidden primary">Resolve Turn</button>
-      </div>
-      <svg id="galaxy-map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-        <g id="map-systems"></g>
-        <g id="map-fleets"></g>
-        <g id="map-visible"></g>
-      </svg>
-      <div id="map-feedback" class="feedback"></div>
-    </main>
-
-    <!-- ── Right panel ───────────────────────────────────────────────────── -->
-    <aside id="action-panel">
-      <section id="selection-info">
-        <h2>Selection</h2>
-        <div id="selection-detail">Click a fleet to act.</div>
-      </section>
-
-      <section id="action-form" class="hidden">
-        <h2>Move Fleet</h2>
-        <label>Destination:
-          <select id="dest-select"></select>
-        </label>
-        <button id="submit-move">Submit Move</button>
-        <div id="action-feedback" class="feedback"></div>
-      </section>
-
-      <section id="events-panel">
-        <h2>Events</h2>
-        <ul id="event-list"><li class="muted">No events yet.</li></ul>
-      </section>
-    </aside>
-
-  </div>
-
-  <script src="/web/game.js"></script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

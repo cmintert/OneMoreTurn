@@ -1,0 +1,251 @@
+/* ── Reset & base ──────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:         #0d1117;
+  --surface:    #161b22;
+  --border:     #30363d;
+  --text:       #c9d1d9;
+  --muted:      #8b949e;
+  --accent:     #58a6ff;
+  --accent-dim: #1f6feb;
+  --danger:     #f85149;
+  --success:    #3fb950;
+  --warn:       #d29922;
+  --fleet-own:  #58a6ff;
+  --fleet-foe:  #f85149;
+  --fleet-stale:#8b949e;
+  --system-col: #e3b341;
+  --planet-col: #3fb950;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Layout ────────────────────────────────────────────────────────────── */
+#root {
+  height: 100vh;
+}
+
+.app-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr 240px;
+  grid-template-rows: 100vh;
+  height: 100vh;
+}
+
+.app-layout--metrics {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+aside { overflow-y: auto; background: var(--surface); padding: 12px; }
+.sidebar       { border-right: 1px solid var(--border); }
+.action-panel  { border-left:  1px solid var(--border); }
+
+main.map-area {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  position: relative;
+}
+
+/* ── Map header ────────────────────────────────────────────────────────── */
+.map-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.turn-label { font-weight: 600; flex: 1; }
+
+/* ── SVG galaxy map ────────────────────────────────────────────────────── */
+.galaxy-map {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Star systems */
+.sys-circle  { fill: var(--system-col); opacity: 0.85; cursor: pointer; }
+.sys-label   { fill: var(--system-col); font-size: 2.5px; text-anchor: middle; pointer-events: none; }
+
+/* Own fleets */
+.fleet-own   { fill: var(--fleet-own); cursor: pointer; }
+/* Visible enemy fleets */
+.fleet-foe   { fill: var(--fleet-foe); cursor: default; }
+/* Stale (remembered) entities */
+.fleet-stale { fill: var(--fleet-stale); stroke: var(--fleet-stale); stroke-width: 0.3;
+               fill-opacity: 0.3; stroke-dasharray: 0.8 0.4; }
+.fleet-label { fill: var(--text); font-size: 2px; text-anchor: middle; pointer-events: none; }
+
+/* Selected fleet highlight */
+.selected-fleet { stroke: #fff; stroke-width: 0.6; }
+
+/* ── Sidebar sections ──────────────────────────────────────────────────── */
+h1 { font-size: 15px; font-weight: 700; color: var(--accent); margin-bottom: 12px; }
+h2 { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+     letter-spacing: 0.04em; margin: 12px 0 6px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+
+.game-list { list-style: none; }
+.game-list li {
+  padding: 5px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+}
+.game-list li:hover { background: var(--border); }
+.game-list li.active { background: var(--accent-dim); color: #fff; }
+
+.game-turn { font-size: 11px; color: var(--muted); }
+
+/* ── Forms ─────────────────────────────────────────────────────────────── */
+input[type="text"], select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 5px 7px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+input[type="text"]:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+button {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--border);
+  color: var(--text);
+  margin-bottom: 4px;
+}
+button:hover { background: var(--muted); color: var(--bg); }
+button.primary { background: var(--accent); color: #000; }
+button.primary:hover { background: var(--accent-dim); color: #fff; }
+
+/* ── Player panel ───────────────────────────────────────────────────────── */
+.resource-table { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+.resource-table span { display: inline-block; margin-right: 8px; }
+
+.planet-list p {
+  font-size: 11px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+.planet-list p strong { color: var(--text); }
+
+/* ── Action / event panels ──────────────────────────────────────────────── */
+.selection-detail { font-size: 12px; color: var(--muted); }
+
+.action-form label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+
+.event-list { list-style: none; padding: 0; }
+.event-list li {
+  font-size: 11px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+.event-list li strong { color: var(--accent); }
+
+/* ── Utility ────────────────────────────────────────────────────────────── */
+.hidden  { display: none !important; }
+.muted   { color: var(--muted); }
+
+.feedback {
+  font-size: 11px;
+  min-height: 16px;
+  margin-top: 4px;
+  border-radius: 4px;
+  padding: 3px 5px;
+}
+.feedback--ok  { color: var(--success); }
+.feedback--err { color: var(--danger);  }
+
+/* ── Metrics view ──────────────────────────────────────────────────────── */
+.metrics-view {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.metrics-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin: 12px 0;
+}
+.metrics-table th,
+.metrics-table td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.metrics-table th {
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.metrics-table th:hover { color: var(--accent); }
+.metrics-table td { color: var(--text); }
+.metrics-table tr:hover td { background: var(--surface); }
+
+/* ── Nav links ─────────────────────────────────────────────────────────── */
+.nav-link {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  margin-top: 8px;
+}
+.nav-link:hover { color: var(--accent-dim); }
+
+/* ── Metrics overlay (dev only) ──────────────────────────────────────── */
+.metrics-overlay {
+  position: fixed;
+  bottom: 8px;
+  right: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 10px;
+  color: var(--muted);
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.8;
+}
