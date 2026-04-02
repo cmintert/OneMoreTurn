@@ -36,3 +36,9 @@ site/
 
 # Environment
 .env
+
+# Frontend/node
+src/web/node_modules/
+src/web/dist/
+src/web/.vite/
+npm-debug.log*
