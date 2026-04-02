@@ -7,12 +7,13 @@ import json
 import pytest
 
 from cli.json_export import create_game
-from cli.server import app as flask_app
+from cli.server import app as flask_app, metrics as server_metrics
 
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    server_metrics.clear()
     flask_app.config["TESTING"] = True
     with flask_app.test_client() as c:
         yield c
@@ -22,6 +23,7 @@ def client(tmp_path, monkeypatch):
 def game_client(tmp_path, monkeypatch):
     """Client with a pre-created game."""
     monkeypatch.chdir(tmp_path)
+    server_metrics.clear()
     create_game("srv", player1="Alice", player2="Bob")
     flask_app.config["TESTING"] = True
     with flask_app.test_client() as c:
@@ -172,3 +174,92 @@ class TestResolveTurnRoute:
         body = resp.get_json()
         executed = [r for r in body["action_results"] if r["status"] == "executed"]
         assert len(executed) >= 1
+
+
+# ---------------------------------------------------------------------------
+# X-Request-ID header
+# ---------------------------------------------------------------------------
+
+
+class TestRequestId:
+    def test_response_contains_request_id(self, client):
+        resp = client.get("/api/games")
+        assert "X-Request-ID" in resp.headers
+        assert len(resp.headers["X-Request-ID"]) > 0
+
+    def test_echoes_provided_request_id(self, client):
+        resp = client.get("/api/games", headers={"X-Request-ID": "custom-123"})
+        assert resp.headers["X-Request-ID"] == "custom-123"
+
+
+# ---------------------------------------------------------------------------
+# GET /api/metrics
+# ---------------------------------------------------------------------------
+
+
+class TestMetricsRoute:
+    def test_returns_json(self, client):
+        # Make a request so there's something to report
+        client.get("/api/games")
+        resp = client.get("/api/metrics")
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert "routes" in body
+        assert "recent_requests" in body
+        assert "telemetry_events" in body
+
+    def test_returns_csv(self, client):
+        client.get("/api/games")
+        resp = client.get("/api/metrics?format=csv")
+        assert resp.status_code == 200
+        assert resp.content_type.startswith("text/csv")
+        text = resp.get_data(as_text=True)
+        assert "route,method,count,avg_ms,p95_ms,error_count" in text
+
+    def test_metrics_count_requests(self, client):
+        for _ in range(3):
+            client.get("/api/games")
+        resp = client.get("/api/metrics")
+        body = resp.get_json()
+        games_route = [r for r in body["routes"] if r["route"] == "/api/games"]
+        assert len(games_route) == 1
+        assert games_route[0]["count"] == 3
+
+
+# ---------------------------------------------------------------------------
+# POST /api/telemetry
+# ---------------------------------------------------------------------------
+
+
+class TestTelemetryRoute:
+    def test_accepts_batch(self, client):
+        events = [
+            {"request_id": "r1", "event_type": "click", "ts_ms": 100, "data": {}},
+            {"request_id": "r2", "event_type": "page_view", "ts_ms": 200, "data": {}},
+        ]
+        resp = client.post(
+            "/api/telemetry",
+            data=json.dumps(events),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["accepted"] == 2
+
+    def test_accepts_single_event(self, client):
+        resp = client.post(
+            "/api/telemetry",
+            data=json.dumps({"request_id": "r1", "event_type": "test", "ts_ms": 1, "data": {}}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["accepted"] == 1
+
+    def test_caps_batch_size(self, client):
+        events = [{"request_id": str(i), "event_type": "x", "ts_ms": i, "data": {}} for i in range(200)]
+        resp = client.post(
+            "/api/telemetry",
+            data=json.dumps(events),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["accepted"] == 100

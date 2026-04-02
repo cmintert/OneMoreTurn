@@ -53,7 +53,7 @@ class TestFullGameResolution:
         game_id = "ten-turn"
 
         for turn in range(10):
-            tm = TurnManager(world, game_id, db, registry, systems=game_systems())
+            tm = TurnManager(world, game_id, systems=game_systems())
             result = tm.resolve_turn()
             assert result.turn_number == turn
             assert world.current_turn == turn + 1
@@ -68,7 +68,7 @@ class TestFullGameResolution:
 
         total_events = 0
         for turn in range(10):
-            tm = TurnManager(world, game_id, db, registry, systems=game_systems())
+            tm = TurnManager(world, game_id, systems=game_systems())
             result = tm.resolve_turn()
             total_events += len(result.events)
 
@@ -91,7 +91,7 @@ class TestFullGameResolution:
         assert initial_minerals is not None
 
         for _ in range(3):
-            tm = TurnManager(world, game_id, db, registry, systems=game_systems())
+            tm = TurnManager(world, game_id, systems=game_systems())
             tm.resolve_turn()
 
         # Check resources increased
@@ -111,7 +111,7 @@ class TestFullGameResolution:
         target_id = _find_entity_by_name(world, "Alpha")
 
         # Submit move order
-        tm = TurnManager(world, game_id, db, registry, systems=game_systems())
+        tm = TurnManager(world, game_id, systems=game_systems())
         action = MoveFleetAction(
             _player_id=alice_id,
             _order_id=uuid.uuid4(),
@@ -128,7 +128,7 @@ class TestFullGameResolution:
 
         # Resolve more turns until arrival
         for _ in range(30):
-            tm = TurnManager(world, game_id, db, registry, systems=game_systems())
+            tm = TurnManager(world, game_id, systems=game_systems())
             tm.resolve_turn()
             fs = world.get_entity(fleet_id).get(FleetStats)
             if fs.turns_remaining == 0:
@@ -149,7 +149,7 @@ class TestFullGameResolution:
         target_system_id = _find_entity_by_name(world, "Alpha")
 
         # Move fleet
-        tm = TurnManager(world, game_id, db, registry, systems=game_systems())
+        tm = TurnManager(world, game_id, systems=game_systems())
         tm.submit_order(MoveFleetAction(
             _player_id=alice_id, _order_id=uuid.uuid4(),
             fleet_id=fleet_id, target_system_id=target_system_id,
@@ -158,7 +158,7 @@ class TestFullGameResolution:
 
         # Resolve until arrival
         for _ in range(30):
-            tm = TurnManager(world, game_id, db, registry, systems=game_systems())
+            tm = TurnManager(world, game_id, systems=game_systems())
             tm.resolve_turn()
             if world.get_entity(fleet_id).get(FleetStats).turns_remaining == 0:
                 break
@@ -167,7 +167,7 @@ class TestFullGameResolution:
         planet_id = _find_entity_by_name(world, "Alpha_1")
 
         # Colonize
-        tm = TurnManager(world, game_id, db, registry, systems=game_systems())
+        tm = TurnManager(world, game_id, systems=game_systems())
         tm.submit_order(ColonizePlanetAction(
             _player_id=alice_id, _order_id=uuid.uuid4(),
             fleet_id=fleet_id, planet_id=planet_id,
@@ -191,7 +191,7 @@ class TestFullGameResolution:
         initial_res = dict(planet.get(Resources).amounts)
 
         for _ in range(3):
-            tm = TurnManager(world, game_id, db, registry, systems=game_systems())
+            tm = TurnManager(world, game_id, systems=game_systems())
             tm.resolve_turn()
 
         # Resources should not have changed (no owner = no production)
@@ -212,7 +212,7 @@ class TestDeterministicReplay:
         target_id = _find_entity_by_name(world, "Alpha")
 
         # Turn 0: move fleet
-        tm = TurnManager(world, game_id, db, registry, systems=game_systems())
+        tm = TurnManager(world, game_id, systems=game_systems())
         move = MoveFleetAction(
             _player_id=alice_id, _order_id=uuid.uuid4(),
             fleet_id=fleet_id, target_system_id=target_id,
@@ -230,7 +230,7 @@ class TestDeterministicReplay:
 
         db_replay = GameDatabase(":memory:")
         db_replay.init_schema()
-        tm_replay = TurnManager(world_replay, game_id, db_replay, registry, systems=game_systems())
+        tm_replay = TurnManager(world_replay, game_id, systems=game_systems())
         for a in saved_actions:
             tm_replay.submit_order(a)
         tm_replay.resolve_turn()

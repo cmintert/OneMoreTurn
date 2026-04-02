@@ -8,7 +8,7 @@ import typing
 import uuid
 from typing import Any
 
-from engine.components import Component
+from engine.components import ChildComponent, Component
 from engine.ecs import World
 
 
@@ -148,10 +148,7 @@ def deserialize_component(record: dict, registry: ComponentRegistry) -> Componen
             if hint is not None:
                 data[field_name] = _deserialize_value(data[field_name], hint, registry)
 
-    # ContainerComponent.children is rebuilt by ChildComponent.on_added hooks.
-    # Clear it here to avoid duplicates when the hook fires during create_entity.
-    if record["component_type"] == "Container" and "children" in data:
-        data["children"] = []
+    data = cls.on_deserialize(data)
 
     return cls(**data)
 
@@ -195,7 +192,7 @@ def _has_child_component(entity_record: dict) -> bool:
     created before their children, allowing ChildComponent.on_add_validation
     to find the parent in the world without raising KeyError.
     """
-    return any(c["component_type"] == "Child" for c in entity_record["components"])
+    return any(c["component_type"] == ChildComponent.component_name() for c in entity_record["components"])
 
 
 def deserialize_world(snapshot: dict, registry: ComponentRegistry) -> World:

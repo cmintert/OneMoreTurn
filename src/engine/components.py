@@ -100,6 +100,16 @@ class Component(ABC):
     ) -> None:
         """Called by World after this component is successfully removed."""
 
+    @classmethod
+    def on_deserialize(cls, data: dict) -> dict:
+        """Called by the serializer before constructing the component from data.
+
+        Subclasses may override this to fix up deserialized field values before
+        the constructor runs.  The default implementation returns ``data``
+        unchanged.
+        """
+        return data
+
 
 # ---------------------------------------------------------------------------
 # Containment components
@@ -125,6 +135,17 @@ class ContainerComponent(Component):
     def version(cls) -> str:
         """Schema version; increment when field names or types change."""
         return "1.0.0"
+
+    @classmethod
+    def on_deserialize(cls, data: dict) -> dict:
+        """Clear ``children`` on load — ChildComponent.on_added rebuilds it.
+
+        Avoids duplicates when the hook fires during world deserialization.
+        """
+        if "children" in data:
+            data = dict(data)
+            data["children"] = []
+        return data
 
     @classmethod
     def on_remove_validation(

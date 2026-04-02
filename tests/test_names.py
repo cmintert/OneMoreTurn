@@ -7,7 +7,8 @@ import uuid
 import pytest
 
 from engine.ecs import SchemaError, World
-from engine.names import NameComponent, NameResolver
+from engine.names import NameComponent
+from cli.names import NameResolver
 
 
 class TestNameComponent:

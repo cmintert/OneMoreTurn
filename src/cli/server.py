@@ -1,20 +1,22 @@
-"""Flask HTTP server for the Phase 6 web UI.
+"""Flask HTTP server for the OneMoreTurn web UI.
 
 Routes:
     GET  /                                     Serve index.html
-    GET  /web/<path>                           Serve static files from src/web/
+    GET  /assets/<path>                        Serve Vite-built assets
     GET  /api/games                            list_games()
     POST /api/games                            create_game()
     GET  /api/game/<game_id>/state?player=...  export_game_state()
     POST /api/game/<game_id>/orders            submit_action()
     POST /api/game/<game_id>/resolve           resolve_turn()
+    GET  /api/metrics?format=json|csv          metrics export
+    POST /api/telemetry                        client telemetry ingest
 """
 
 from __future__ import annotations
 
 import pathlib
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 from cli.json_export import (
     create_game,
@@ -23,20 +25,64 @@ from cli.json_export import (
     resolve_turn,
     submit_action,
 )
+from cli.metrics import MetricsStore, RequestRecord, TelemetryEvent
 
 _WEB_DIR = pathlib.Path(__file__).parent.parent / "web"
+_DIST_DIR = _WEB_DIR / "dist"
 
 app = Flask(__name__)
+metrics = MetricsStore()
+_telemetry_enabled = True
 
 
 # ---------------------------------------------------------------------------
-# Static file serving
+# Request middleware — X-Request-ID + timing
+# ---------------------------------------------------------------------------
+
+
+@app.before_request
+def _before_request():
+    rid = request.headers.get("X-Request-ID") or MetricsStore.generate_request_id()
+    request._request_id = rid  # type: ignore[attr-defined]
+    request._start_time = MetricsStore.perf_now()  # type: ignore[attr-defined]
+
+
+@app.after_request
+def _after_request(response):
+    rid = getattr(request, "_request_id", "")
+    response.headers["X-Request-ID"] = rid
+
+    if _telemetry_enabled:
+        start = getattr(request, "_start_time", None)
+        duration_ms = (MetricsStore.perf_now() - start) * 1000 if start else 0.0
+        metrics.record_request(
+            RequestRecord(
+                request_id=rid,
+                route=request.path,
+                method=request.method,
+                status=response.status_code,
+                duration_ms=round(duration_ms, 2),
+                ts=MetricsStore.wall_now(),
+            )
+        )
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Static file serving — serves Vite build output (web/dist/) or legacy (web/)
 # ---------------------------------------------------------------------------
 
 
 @app.route("/")
 def index():
+    if (_DIST_DIR / "index.html").exists():
+        return send_from_directory(_DIST_DIR, "index.html")
     return send_from_directory(_WEB_DIR, "index.html")
+
+
+@app.route("/assets/<path:filename>")
+def assets_static(filename):
+    return send_from_directory(_DIST_DIR / "assets", filename)
 
 
 @app.route("/web/<path:filename>")
@@ -117,10 +163,54 @@ def api_resolve_turn(game_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Metrics & telemetry routes
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/metrics", methods=["GET"])
+def api_metrics():
+    fmt = request.args.get("format", "json").lower()
+    if fmt == "csv":
+        return Response(metrics.export_csv(), mimetype="text/csv",
+                        headers={"Content-Disposition": "attachment; filename=metrics.csv"})
+    return jsonify(metrics.export_json())
+
+
+@app.route("/api/telemetry", methods=["POST"])
+def api_telemetry():
+    if not _telemetry_enabled:
+        return jsonify({"accepted": 0}), 200
+    body = request.get_json(silent=True)
+    if not isinstance(body, list):
+        body = [body] if body else []
+    count = 0
+    for item in body[:100]:  # cap batch size to prevent abuse
+        if not isinstance(item, dict):
+            continue
+        metrics.record_telemetry(
+            TelemetryEvent(
+                request_id=item.get("request_id", ""),
+                event_type=item.get("event_type", ""),
+                ts_ms=item.get("ts_ms", 0),
+                data=item.get("data", {}),
+            )
+        )
+        count += 1
+    return jsonify({"accepted": count}), 200
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 
-def run_server(host: str = "127.0.0.1", port: int = 8000, debug: bool = False) -> None:
+def run_server(
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    debug: bool = False,
+    telemetry: bool = True,
+) -> None:
     """Start the Flask development server."""
+    global _telemetry_enabled  # noqa: PLW0603
+    _telemetry_enabled = telemetry
     app.run(host=host, port=port, debug=debug)

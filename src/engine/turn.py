@@ -10,11 +10,9 @@ from typing import TYPE_CHECKING
 from engine.actions import Action, ActionResult, ActionSystem
 from engine.events import Event
 from engine.systems import System, SystemExecutor
-from persistence.db import GameDatabase
-from persistence.serialization import ComponentRegistry
 
 if TYPE_CHECKING:
-    pass
+    from engine.ecs import World
 
 
 # ---------------------------------------------------------------------------
@@ -43,6 +41,7 @@ class TurnResult:
     """Outcome of resolving a single turn."""
 
     turn_number: int
+    world: "World"
     events: list[Event] = field(default_factory=list)
     results: list[ActionResult] = field(default_factory=list)
     snapshot_id: str = ""
@@ -63,8 +62,6 @@ class TurnManager:
         self,
         world: "World",
         game_id: str | uuid.UUID,
-        db: GameDatabase,
-        registry: ComponentRegistry,
         systems: list[System] | None = None,
     ) -> None:
         """Initialise TurnManager from an already-loaded world snapshot.
@@ -72,21 +69,17 @@ class TurnManager:
         The manager is intentionally stateless across CLI invocations: the
         CLI reconstructs it from the database on every command.  All mutable
         turn state (orders, current world) lives here for the duration of a
-        single resolve call, then is flushed to the DB.
+        single resolve call.
 
         Args:
             world: Deserialized game world for the current turn.
-            game_id: Unique game identifier (used for DB queries and RNG seeding).
-            db: Open database connection for loading/saving snapshots and orders.
-            registry: Component registry for serialization round-trips.
+            game_id: Unique game identifier (used for RNG seeding).
             systems: Additional game systems to register alongside ActionSystem.
         """
         from engine.ecs import World
 
         self._world: World = world
         self._game_id = str(game_id)
-        self._db = db
-        self._registry = registry
         self._state = TurnState.ORDERS_OPEN
         # {player_id: {order_id: Action}}
         self._orders: dict[uuid.UUID, dict[uuid.UUID, Action]] = {}
@@ -220,34 +213,13 @@ class TurnManager:
             events = self._world.event_bus.emitted
             action_results = action_system.results
 
-            # Persist snapshot
+            # Advance turn counter
             next_turn = turn_number + 1
             self._world.current_turn = next_turn
-            self._db.save_snapshot(
-                self._game_id,
-                next_turn,
-                self._world,
-                self._registry,
-            )
-
-            # Persist orders for this turn (for replay)
-            self._db.save_orders(
-                self._game_id, turn_number, all_actions
-            )
-
-            # Log events
-            for event in events:
-                self._db.log_event(
-                    self._game_id,
-                    turn_number,
-                    event,
-                )
-
-            # Persist full events for round-trip loading
-            self._db.save_events(self._game_id, turn_number, events)
 
             result = TurnResult(
                 turn_number=turn_number,
+                world=self._world,
                 events=events,
                 results=action_results,
                 snapshot_id=f"{self._game_id}:turn:{next_turn}",

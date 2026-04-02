@@ -81,12 +81,12 @@ def _build_game(db, registry, n_players=2, n_claimable=2):
 class TestTurnState:
     def test_initial_state_is_orders_open(self, db, registry):
         world, game_id, _, _ = _build_game(db, registry)
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         assert tm.state == TurnState.ORDERS_OPEN
 
     def test_current_turn_matches_world(self, db, registry):
         world, game_id, _, _ = _build_game(db, registry)
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         assert tm.current_turn == world.current_turn
 
 
@@ -98,7 +98,7 @@ class TestTurnState:
 class TestOrderSubmission:
     def test_submit_valid_order_returns_valid(self, db, registry):
         world, game_id, players, claimables = _build_game(db, registry)
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         _, pid = players[0]
 
         action = ClaimAction(
@@ -109,7 +109,7 @@ class TestOrderSubmission:
 
     def test_submit_invalid_order_returns_errors(self, db, registry):
         world, game_id, players, _ = _build_game(db, registry)
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         _, pid = players[0]
 
         action = ClaimAction(
@@ -121,7 +121,7 @@ class TestOrderSubmission:
 
     def test_get_orders_returns_submitted(self, db, registry):
         world, game_id, players, claimables = _build_game(db, registry)
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         _, pid = players[0]
 
         action = ClaimAction(
@@ -134,7 +134,7 @@ class TestOrderSubmission:
     def test_replace_order_supersedes_original(self, db, registry):
         """DEV_PHASES exit test: replacement order supersedes original."""
         world, game_id, players, claimables = _build_game(db, registry)
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         _, pid = players[0]
         oid = uuid.uuid4()
 
@@ -154,7 +154,7 @@ class TestOrderSubmission:
 
     def test_remove_order(self, db, registry):
         world, game_id, players, claimables = _build_game(db, registry)
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         _, pid = players[0]
         oid = uuid.uuid4()
 
@@ -174,7 +174,7 @@ class TestOrderSubmission:
 class TestTurnResolution:
     def test_resolve_returns_turn_result(self, db, registry):
         world, game_id, players, claimables = _build_game(db, registry)
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         _, pid = players[0]
 
         action = ClaimAction(
@@ -190,14 +190,16 @@ class TestTurnResolution:
 
     def test_resolve_saves_snapshot_to_db(self, db, registry):
         world, game_id, players, claimables = _build_game(db, registry)
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         _, pid = players[0]
 
         action = ClaimAction(
             _player_id=pid, _order_id=uuid.uuid4(), target_id=claimables[0].id
         )
         tm.submit_order(action)
-        tm.resolve_turn()
+        result = tm.resolve_turn()
+
+        db.save_snapshot(game_id, result.world.current_turn, result.world, registry)
 
         # Snapshot for turn 1 should exist (post-resolution state)
         loaded = db.load_snapshot(game_id, 1, registry)
@@ -205,21 +207,24 @@ class TestTurnResolution:
 
     def test_resolve_saves_events_to_db(self, db, registry):
         world, game_id, players, claimables = _build_game(db, registry)
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         _, pid = players[0]
 
         action = ClaimAction(
             _player_id=pid, _order_id=uuid.uuid4(), target_id=claimables[0].id
         )
         tm.submit_order(action)
-        tm.resolve_turn()
+        result = tm.resolve_turn()
+
+        for event in result.events:
+            db.log_event(game_id, result.turn_number, event)
 
         events = db.get_turn_events(game_id, 0)
         assert len(events) > 0
 
     def test_resolve_advances_turn(self, db, registry):
         world, game_id, players, claimables = _build_game(db, registry)
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         _, pid = players[0]
 
         action = ClaimAction(
@@ -231,7 +236,7 @@ class TestTurnResolution:
 
     def test_resolve_clears_orders(self, db, registry):
         world, game_id, players, claimables = _build_game(db, registry)
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         _, pid = players[0]
 
         action = ClaimAction(
@@ -243,7 +248,7 @@ class TestTurnResolution:
 
     def test_state_returns_to_open_after_resolve(self, db, registry):
         world, game_id, players, claimables = _build_game(db, registry)
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         _, pid = players[0]
 
         action = ClaimAction(
@@ -257,7 +262,7 @@ class TestTurnResolution:
         """Systems beyond ActionSystem run during resolution."""
         world, game_id, players, claimables = _build_game(db, registry)
         tm = TurnManager(
-            world, game_id, db, registry,
+            world, game_id,
             systems=[ScoreBonusSystem()],
         )
         _, pid_a = players[0]
@@ -285,7 +290,7 @@ class TestMultiTurn:
         world, game_id, players, claimables = _build_game(
             db, registry, n_players=2, n_claimable=3
         )
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         _, pid_a = players[0]
         _, pid_b = players[1]
         player_a = players[0][0]
@@ -328,7 +333,7 @@ class TestDeterminism:
         player_a = players[0][0]
 
         # Turn 0: claim + increment
-        tm = TurnManager(world, game_id, db, registry)
+        tm = TurnManager(world, game_id)
         tm.submit_order(ClaimAction(
             _player_id=pid_a,
             _order_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
@@ -343,12 +348,8 @@ class TestDeterminism:
 
         # Replay: load turn 0 snapshot and re-run with same orders
         world2 = db.load_snapshot(game_id, 0, registry)
-        # Use a fresh db to avoid UNIQUE constraint on save
-        db2 = GameDatabase(":memory:")
-        db2.init_schema()
-        db2.save_snapshot(game_id, 0, world2, registry)
 
-        tm2 = TurnManager(world2, game_id, db2, registry)
+        tm2 = TurnManager(world2, game_id)
         tm2.submit_order(ClaimAction(
             _player_id=pid_a,
             _order_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),

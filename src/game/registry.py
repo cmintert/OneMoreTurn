@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from typing import TypeVar
 
-from persistence.serialization import ActionRegistry, ComponentRegistry
-
 _T = TypeVar("_T")
 
 # Accumulator lists populated by the decorators below.
@@ -37,8 +35,10 @@ def system(cls: type[_T]) -> type[_T]:
     return cls
 
 
-def game_component_registry() -> ComponentRegistry:
+def game_component_registry():
     """Build a ComponentRegistry with all game and engine components registered."""
+    from persistence.serialization import ComponentRegistry
+
     # Guard-imports ensure game modules are loaded (decorators fire on import).
     import game.components as _gc  # noqa: F401
     from engine.components import ChildComponent, ContainerComponent
@@ -51,8 +51,10 @@ def game_component_registry() -> ComponentRegistry:
     return reg
 
 
-def game_action_registry() -> ActionRegistry:
+def game_action_registry():
     """Build an ActionRegistry with all game actions registered."""
+    from persistence.serialization import ActionRegistry
+
     import game.actions as _ga  # noqa: F401
 
     reg = ActionRegistry()

@@ -11,7 +11,8 @@ import uuid
 
 from engine.components import ChildComponent, ContainerComponent
 from engine.ecs import World
-from engine.names import NameComponent, NameResolver
+from engine.names import NameComponent
+from cli.names import NameResolver
 from engine.rng import SystemRNG
 from engine.turn import TurnManager
 from game.actions import ColonizePlanetAction, HarvestResourcesAction, MoveFleetAction
@@ -306,7 +307,7 @@ def submit_action(
             "warnings": [],
         }
 
-    tm = TurnManager(world, game_id, db, registry, systems=game_systems())
+    tm = TurnManager(world, game_id, systems=game_systems())
     result = tm.submit_order(action)
     if result.valid:
         db.save_orders(game_id, turn, tm.get_all_orders())
@@ -323,11 +324,19 @@ def resolve_turn(game_id: str) -> dict:
     turn = db.latest_turn(game_id)
     world = db.load_snapshot(game_id, turn, registry)
 
-    tm = TurnManager(world, game_id, db, registry, systems=game_systems())
-    for action in db.load_orders(game_id, turn, action_reg):
+    tm = TurnManager(world, game_id, systems=game_systems())
+    saved_actions = db.load_orders(game_id, turn, action_reg)
+    for action in saved_actions:
         tm.submit_order(action)
 
     result = tm.resolve_turn()
+
+    db.save_snapshot(game_id, result.world.current_turn, result.world, registry)
+    db.save_orders(game_id, turn, saved_actions)
+    for event in result.events:
+        db.log_event(game_id, turn, event)
+    db.save_events(game_id, turn, result.events)
+
     db.close()
     return {
         "turn": result.turn_number + 1,  # new current turn after resolution

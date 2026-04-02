@@ -18,7 +18,8 @@ import uuid
 import typer
 
 from engine.ecs import World
-from engine.names import NameComponent, NameResolver
+from engine.names import NameComponent
+from cli.names import NameResolver
 from engine.rng import SystemRNG
 from engine.turn import TurnManager
 from game.actions import ColonizePlanetAction, HarvestResourcesAction, MoveFleetAction
@@ -100,7 +101,7 @@ def submit_orders(
         db.close()
         raise typer.Exit(1)
 
-    tm = TurnManager(world, game, db, registry, systems=game_systems())
+    tm = TurnManager(world, game, systems=game_systems())
     action_list = json.loads(orders)
 
     for order_dict in action_list:
@@ -136,13 +137,19 @@ def resolve_turn(
     turn_number = db.latest_turn(game)
     world = db.load_snapshot(game, turn_number, registry)
 
-    tm = TurnManager(world, game, db, registry, systems=game_systems())
+    tm = TurnManager(world, game, systems=game_systems())
 
     saved_actions = db.load_orders(game, turn_number, action_reg)
     for action in saved_actions:
         tm.submit_order(action)
 
     result = tm.resolve_turn()
+
+    db.save_snapshot(game, result.world.current_turn, result.world, registry)
+    db.save_orders(game, turn_number, saved_actions)
+    for event in result.events:
+        db.log_event(game, turn_number, event)
+    db.save_events(game, turn_number, result.events)
 
     typer.echo(f"Turn {result.turn_number} resolved.")
     typer.echo(f"  Events: {len(result.events)}")
@@ -304,12 +311,15 @@ def serve(
     host: str = typer.Option("127.0.0.1", help="Host to bind to."),
     port: int = typer.Option(8000, help="Port to listen on."),
     debug: bool = typer.Option(False, help="Enable Flask debug mode."),
+    telemetry: bool = typer.Option(True, help="Enable request metrics and telemetry collection."),
 ) -> None:
     """Start the web UI server at http://<host>:<port>/"""
     from cli.server import run_server  # deferred to keep Flask optional
 
     typer.echo(f"Starting OneMoreTurn web UI at http://{host}:{port}/")
-    run_server(host=host, port=port, debug=debug)
+    if telemetry:
+        typer.echo("  Telemetry: enabled (GET /api/metrics, POST /api/telemetry)")
+    run_server(host=host, port=port, debug=debug, telemetry=telemetry)
 
 
 if __name__ == "__main__":

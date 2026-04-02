@@ -4,7 +4,7 @@ from engine.actions import Action, ActionResult, ActionSystem, ValidationResult
 from engine.components import ChildComponent, Component, ContainerComponent
 from engine.ecs import Entity, SchemaError, World
 from engine.events import Event, EventBus
-from engine.names import NameComponent, NameResolver
+from engine.names import NameComponent
 from engine.rng import SystemRNG
 from engine.systems import (
     CycleDetectedError,
@@ -28,7 +28,6 @@ __all__ = [
     "EventBus",
     "MissingEntitiesError",
     "NameComponent",
-    "NameResolver",
     "SchemaError",
     "System",
     "SystemExecutor",
