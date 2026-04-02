@@ -63,11 +63,19 @@ src/engine/       ECS core: Entity, World, Component, System, Action, EventBus, 
 
 ### Game content (`src/game/`)
 
-- **`components.py`** — `Position`, `Owner`, `Resources` (dict stockpile with capacity), `FleetStats` (destination, turns_remaining), `PopulationStats`, `VisibilityComponent` (visible_to, revealed_to sets)
-- **`systems.py`** — `ProductionSystem` (MAIN), `MovementSystem` (MAIN), `VisibilitySystem` (POST_TURN); `OBSERVATION_RANGE = 10.0`
+- **`config.py`** — **Configuration layer (Phase 7).** Pydantic models + TOML loaders.
+  Exposes four module-level singletons: `BALANCE`, `ARCHETYPES`, `TECH_TREE`, `MAP`.
+  All tunable game values come from here — never hardcode numeric constants in game code.
+- **`components.py`** — `Position`, `Owner`, `Resources` (dict stockpile with capacity),
+  `FleetStats` (destination, turns_remaining), `PopulationStats`,
+  `VisibilityComponent` (visible_to, revealed_to sets)
+- **`systems.py`** — `ProductionSystem` (MAIN), `MovementSystem` (MAIN),
+  `VisibilitySystem` (POST_TURN); all numeric thresholds read from `BALANCE`
 - **`actions.py`** — `MoveFleetAction`, `ColonizePlanetAction`, `HarvestResourcesAction`
-- **`archetypes.py`** — Factory functions: `create_star_system()`, `create_planet()`, `create_fleet()`
-- **`setup.py`** — Procedural, seeded map generation
+- **`archetypes.py`** — Factory functions: `create_star_system()`, `create_planet()`,
+  `create_fleet()`; all default values read from `ARCHETYPES`
+- **`setup.py`** — Procedural, seeded map generation; all positions and resource ranges
+  read from `MAP`
 - **`registry.py`** — `game_component_registry()`, `game_action_registry()`, `game_systems()` — the wiring layer connecting persistence to game content
 - **`summary.py`** — `generate_turn_summary()` filters entity state and events by per-player fog-of-war
 
@@ -116,8 +124,25 @@ Tests live in `tests/` with one module per source module. `conftest.py` provides
 
 Key integration test modules: `test_game_integration.py` (5-turn full game simulation), `test_integration.py` (engine end-to-end), `test_cli.py` (CLI command integration).
 
+## Game configuration
+
+All tunable game values live in `data/*.toml`. **Do not hardcode numeric constants
+in `src/game/` code.** Use the singletons from `src/game/config.py` instead:
+
+| Singleton | File | Controls |
+| --- | --- | --- |
+| `BALANCE` | `data/balance.toml` | Production rates, resource splits, observation range |
+| `ARCHETYPES` | `data/archetypes.toml` | Fleet, planet, star system defaults |
+| `TECH_TREE` | `data/tech_tree.toml` | Research costs and speed multipliers |
+| `MAP` | `data/map.toml` | Home positions, neutral systems, resource ranges |
+
+To add a new tunable value: add the field to the TOML file, add it to the matching
+Pydantic model in `config.py`, then reference the singleton in game code.
+
 ## Development status
 
-Phases 1–4 are complete (ECS core, persistence, turn engine, minimum playable game). Phase 5 is next: assessing extensibility and stress-testing the architecture by attempting to add a new game mechanic without modifying the engine.
+Phases 1–7 are complete. Phase 7 introduced data-driven configuration — all game
+balance values now live in `data/*.toml` and are validated by Pydantic at startup.
 
-Design rationale and phase-by-phase documentation live in `DESIGN.md`, `DEV_PHASES.md`, and `PHASE_*_DOCU.md`.
+Design rationale and phase-by-phase documentation live in `DESIGN.md`, `DEV_PHASES.md`,
+and `PHASE_*_DOCU.md`.

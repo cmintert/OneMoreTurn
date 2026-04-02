@@ -1,0 +1,18 @@
+schema_version = "1"
+
+[star_system]
+resource_capacity = 500.0
+
+[planet]
+resource_capacity    = 200.0
+default_growth_rate  = 0.05
+default_morale       = 1.0
+# Starting stats when a player colonizes an empty planet
+colonize_population  = 10
+colonize_growth_rate = 0.05
+colonize_morale      = 1.0
+
+[fleet]
+speed     = 5.0
+capacity  = 50.0
+condition = 100.0

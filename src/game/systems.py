@@ -20,6 +20,7 @@ from game.components import (
     Resources,
     VisibilityComponent,
 )
+from game.config import BALANCE, TECH_TREE
 from game.registry import system
 
 if TYPE_CHECKING:
@@ -72,12 +73,11 @@ class ProductionSystem(System):
         for entity, pop, resources, owner in world.query(
             PopulationStats, Resources, Owner
         ):
-            base_rate = 0.1
-            production = pop.size * pop.morale * base_rate
+            production = pop.size * pop.morale * BALANCE.production.base_rate
 
-            minerals = production * 0.4
-            energy = production * 0.3
-            food = production * 0.3
+            minerals = production * BALANCE.production.mineral_split
+            energy = production * BALANCE.production.energy_split
+            food = production * BALANCE.production.food_split
 
             for rtype, amount in [
                 ("minerals", minerals),
@@ -88,7 +88,7 @@ class ProductionSystem(System):
                 resources.amounts[rtype] = min(current + amount, resources.capacity)
 
             growth = int(pop.size * pop.growth_rate * pop.morale)
-            pop.size += max(growth, 1)
+            pop.size += max(growth, BALANCE.production.min_growth)
 
             world.event_bus.publish(
                 Event(
@@ -211,8 +211,9 @@ class VisibilitySystem(System):
     """
 
     # Maximum distance (in coordinate units) at which an entity can observe
-    # another.  Kept as a class attribute so subclasses or tests can override it.
-    OBSERVATION_RANGE = 10.0
+    # another.  Loaded from data/balance.toml [visibility].  Kept as a class
+    # attribute so subclasses or tests can override it.
+    OBSERVATION_RANGE: float = BALANCE.visibility.observation_range
 
     @classmethod
     def system_name(cls) -> str:
@@ -273,10 +274,7 @@ class VisibilitySystem(System):
 # Propulsion tech tree
 # ---------------------------------------------------------------------------
 
-PROPULSION_TECHS: dict[str, dict] = {
-    "ion_drive": {"cost": 3, "speed_multiplier": 1.5},
-    "warp_core": {"cost": 8, "speed_multiplier": 2.5},
-}
+PROPULSION_TECHS: dict[str, dict] = TECH_TREE.as_dict()
 
 
 @system

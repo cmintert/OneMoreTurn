@@ -7,6 +7,7 @@ import uuid
 from engine.ecs import World
 from engine.rng import SystemRNG
 from game.archetypes import create_civilization, create_fleet, create_planet, create_star_system
+from game.config import MAP
 
 
 def setup_game(
@@ -24,7 +25,7 @@ def setup_game(
             int=rng.randint(0, 2**128 - 1)
         )
 
-    home_positions = [(10.0, 50.0), (90.0, 50.0)]
+    home_positions = [tuple(pos) for pos in MAP.home_worlds.positions]
 
     for i, (pname, pid) in enumerate(player_ids.items()):
         hx, hy = home_positions[i]
@@ -34,8 +35,12 @@ def setup_game(
             world,
             f"{pname}_Prime",
             system,
-            resources={"minerals": 50.0, "energy": 30.0, "food": 40.0},
-            population=100,
+            resources={
+                "minerals": MAP.home_worlds.starting_minerals,
+                "energy": MAP.home_worlds.starting_energy,
+                "food": MAP.home_worlds.starting_food,
+            },
+            population=MAP.home_worlds.starting_population,
             owner_id=pid,
             owner_name=pname,
         )
@@ -45,30 +50,27 @@ def setup_game(
             pid,
             pname,
             system,
-            speed=5.0,
-            cargo={"minerals": 10.0, "energy": 5.0},
+            cargo={
+                "minerals": MAP.home_worlds.fleet_minerals,
+                "energy": MAP.home_worlds.fleet_energy,
+            },
         )
         create_civilization(world, pid, pname)
 
-    neutral_systems = [
-        ("Alpha", 30.0, 30.0),
-        ("Beta", 50.0, 50.0),
-        ("Gamma", 70.0, 70.0),
-        ("Delta", 50.0, 20.0),
-        ("Epsilon", 40.0, 60.0),
-    ]
-    for sname, sx, sy in neutral_systems:
-        system = create_star_system(world, sname, sx, sy)
-        n_planets = rng.randint(1, 2)
+    _npr = MAP.neutral_planet_resources
+    _pps = _npr.planets_per_system
+    for ns in MAP.neutral_system:
+        system = create_star_system(world, ns.name, ns.x, ns.y)
+        n_planets = rng.randint(_pps[0], _pps[1])
         for j in range(n_planets):
             create_planet(
                 world,
-                f"{sname}_{j + 1}",
+                f"{ns.name}_{j + 1}",
                 system,
                 resources={
-                    "minerals": float(rng.randint(10, 60)),
-                    "energy": float(rng.randint(5, 40)),
-                    "food": float(rng.randint(5, 30)),
+                    "minerals": float(rng.randint(int(_npr.mineral_range[0]), int(_npr.mineral_range[1]))),
+                    "energy": float(rng.randint(int(_npr.energy_range[0]), int(_npr.energy_range[1]))),
+                    "food": float(rng.randint(int(_npr.food_range[0]), int(_npr.food_range[1]))),
                 },
             )
 

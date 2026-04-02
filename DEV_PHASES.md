@@ -430,4 +430,38 @@ Content before assessment. Skipping layers creates rework.
 
 ---
 
+## Phase 7 — Data-Driven Configuration
+
+**Goal:** Make the game tunable without touching Python. Every designer-owned balance
+value migrates out of source code into external TOML files under `data/`.
+
+### Deliverables
+
+- `data/balance.toml` — production rates, resource splits, observation range
+- `data/archetypes.toml` — default fleet, planet, and star system values
+- `data/tech_tree.toml` — research costs and speed multipliers
+- `data/map.toml` — home world positions, neutral systems, resource ranges
+- `src/game/config.py` — Pydantic models, TOML loaders, module-level singletons
+  (`BALANCE`, `ARCHETYPES`, `TECH_TREE`, `MAP`)
+- All 28 hardcoded constants removed from `systems.py`, `archetypes.py`, `setup.py`,
+  `actions.py` and replaced with config references
+- `tests/test_config.py` — loading, validation, migration, and integration tests
+
+### Tests
+
+- Invalid config (splits not summing to 1.0, negative rates) raises a clear error at
+  startup — no silent wrong values mid-game
+- Overriding a config singleton in tests changes downstream system output (confirms wiring)
+- A v1 config file migrates cleanly to v2 via the migration chain
+- All 399 Phase 1–6 tests still pass
+
+### Exit Criteria
+
+A designer can change `observation_range` in `data/balance.toml` and the visibility
+system uses the new value with zero Python edits. `ruff check src/ tests/` still passes.
+
+See [PHASE_7_DOCU.md](PHASE_7_DOCU.md) for the full implementation plan.
+
+---
+
 *End of development phases.*

@@ -1,0 +1,42 @@
+schema_version = "1"
+
+[home_worlds]
+starting_minerals   = 50.0
+starting_energy     = 30.0
+starting_food       = 40.0
+starting_population = 100
+fleet_minerals      = 10.0
+fleet_energy        = 5.0
+positions           = [[10.0, 50.0], [90.0, 50.0]]
+
+[[neutral_system]]
+name = "Alpha"
+x    = 30.0
+y    = 30.0
+
+[[neutral_system]]
+name = "Beta"
+x    = 50.0
+y    = 50.0
+
+[[neutral_system]]
+name = "Gamma"
+x    = 70.0
+y    = 70.0
+
+[[neutral_system]]
+name = "Delta"
+x    = 50.0
+y    = 20.0
+
+[[neutral_system]]
+name = "Epsilon"
+x    = 40.0
+y    = 60.0
+
+[neutral_planet_resources]
+# [min, max] ranges for RNG-generated planets in neutral systems
+mineral_range      = [10.0, 60.0]
+energy_range       = [5.0,  40.0]
+food_range         = [5.0,  30.0]
+planets_per_system = [1, 2]

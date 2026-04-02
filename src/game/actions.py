@@ -18,6 +18,7 @@ from game.components import (
     ResearchComponent,
     Resources,
 )
+from game.config import ARCHETYPES
 from game.registry import action
 
 
@@ -237,7 +238,11 @@ class ColonizePlanetAction(Action):
         if not planet.has(PopulationStats):
             world.add_component(
                 planet.id,
-                PopulationStats(size=10, growth_rate=0.05, morale=1.0),
+                PopulationStats(
+                    size=ARCHETYPES.planet.colonize_population,
+                    growth_rate=ARCHETYPES.planet.colonize_growth_rate,
+                    morale=ARCHETYPES.planet.colonize_morale,
+                ),
             )
 
         return [

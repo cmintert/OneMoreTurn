@@ -1,0 +1,11 @@
+schema_version = "1"
+
+[[tech]]
+id               = "ion_drive"
+cost             = 3        # turns to research
+speed_multiplier = 1.5
+
+[[tech]]
+id               = "warp_core"
+cost             = 8
+speed_multiplier = 2.5

@@ -7,6 +7,7 @@ import uuid
 from engine.components import ChildComponent, ContainerComponent
 from engine.ecs import Entity, World
 from engine.names import NameComponent
+from game.config import ARCHETYPES
 from game.components import (
     FleetStats,
     Owner,
@@ -31,7 +32,7 @@ def create_star_system(
             NameComponent(name=name),
             Position(x=x, y=y, parent_system_id=None),
             ContainerComponent(),
-            Resources(amounts=base_resources or {}, capacity=500.0),
+            Resources(amounts=base_resources or {}, capacity=ARCHETYPES.star_system.resource_capacity),
             VisibilityComponent(),
         ]
     )
@@ -52,12 +53,16 @@ def create_planet(
         NameComponent(name=name),
         Position(x=sys_pos.x, y=sys_pos.y, parent_system_id=parent_system.id),
         ChildComponent(parent_id=parent_system.id),
-        Resources(amounts=resources or {}, capacity=200.0),
+        Resources(amounts=resources or {}, capacity=ARCHETYPES.planet.resource_capacity),
         VisibilityComponent(),
     ]
     if population > 0:
         components.append(
-            PopulationStats(size=population, growth_rate=0.05, morale=1.0)
+            PopulationStats(
+                size=population,
+                growth_rate=ARCHETYPES.planet.default_growth_rate,
+                morale=ARCHETYPES.planet.default_morale,
+            )
         )
     if owner_id is not None:
         components.append(Owner(player_id=owner_id, player_name=owner_name))
@@ -70,7 +75,7 @@ def create_fleet(
     owner_id: uuid.UUID,
     owner_name: str,
     parent_system: Entity,
-    speed: float = 5.0,
+    speed: float = ARCHETYPES.fleet.speed,
     cargo: dict[str, float] | None = None,
 ) -> Entity:
     """Create a fleet docked at a star system."""
@@ -81,8 +86,8 @@ def create_fleet(
             Position(x=sys_pos.x, y=sys_pos.y, parent_system_id=parent_system.id),
             ChildComponent(parent_id=parent_system.id),
             Owner(player_id=owner_id, player_name=owner_name),
-            FleetStats(speed=speed, capacity=50.0, condition=100.0),
-            Resources(amounts=cargo or {}, capacity=50.0),
+            FleetStats(speed=speed, capacity=ARCHETYPES.fleet.capacity, condition=ARCHETYPES.fleet.condition),
+            Resources(amounts=cargo or {}, capacity=ARCHETYPES.fleet.capacity),
             VisibilityComponent(),
         ]
     )

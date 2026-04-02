@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:wiki.factorio.com)",
+      "WebFetch(domain:www.gamedeveloper.com)",
+      "WebFetch(domain:pdx.tools)",
+      "WebFetch(domain:lua-api.factorio.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:bevy-cheatbook.github.io)",
+      "WebFetch(domain:www.hutch.io)",
+      "WebFetch(domain:oneuptime.com)",
+      "WebFetch(domain:arielcoppes.dev)",
+      "WebFetch(domain:dwarffortresswiki.org)",
+      "WebFetch(domain:civilization.fandom.com)",
+      "WebFetch(domain:steamcommunity.com)",
+      "WebFetch(domain:stellaris.paradoxwikis.com)",
+      "Bash(python -m pytest tests/test_config.py -v)",
+      "Bash(.venv/Scripts/ruff check:*)",
+      "Bash(markdownlint \"PHASE_7_DOCU.md\")"
+    ]
+  }
+}

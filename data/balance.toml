@@ -1,0 +1,13 @@
+schema_version = "1"
+
+[production]
+# Output formula: production = population * morale * base_rate
+base_rate     = 0.1
+mineral_split = 0.40   # fraction of output → minerals (must sum to 1.0 with others)
+energy_split  = 0.30
+food_split    = 0.30
+min_growth    = 1      # minimum population increase per turn
+
+[visibility]
+# Euclidean distance at which fleets can observe other entities
+observation_range = 10.0
